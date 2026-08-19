@@ -36,14 +36,12 @@ ACCOUNT_STATUS_FILE = "account_status.pkl"
 account_status = {}
 
 USERS_FILE = "users.pkl"
-auto_like_users = []  # List of target UIDs to auto-like daily
-user_stats = {}       # uid -> stats
+auto_like_users = []
+user_stats = {}
 like_history = []
 
-# Auto-like time: default 4:00 AM IST
 AUTO_LIKE_HOUR = 4
 AUTO_LIKE_MINUTE = 0
-AUTO_LIKE_SECOND = 0
 
 RATE_LIMIT_DELAYS = [0.02, 0.05, 0.08, 0.1]
 
@@ -58,7 +56,6 @@ REGION_URLS = {
     'MENA': 'https://clientbp.ggpolarbear.com'
 }
 
-# Activity Logs
 activity_logs = []
 
 def add_activity_log(message, log_type="info"):
@@ -187,11 +184,11 @@ def add_to_history(target_uid, likes_sent, before, after, username, server="IND"
     }
     like_history.append(entry)
     save_users()
-    add_activity_log(f"✅ {username} | Sent {likes_sent} likes | Before: {before} | After: {after} | Gained: {after - before} | Server: {server}", "success")
+    add_activity_log(f"✅ {username} | +{likes_sent} likes | Server: {server}", "success")
 
 def get_next_reset_time():
     now = datetime.now()
-    reset_time = datetime(now.year, now.month, now.day, AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE, AUTO_LIKE_SECOND)
+    reset_time = datetime(now.year, now.month, now.day, AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE, 0)
     if now >= reset_time:
         reset_time += timedelta(days=1)
     return reset_time
@@ -259,20 +256,16 @@ async def get_user_info(target_uid, server_name="IND"):
         accounts = load_accounts(server_name)
         if not accounts:
             return None
-        
         check_token = None
         for account in accounts[:3]:
             token = await get_valid_token(account['uid'], account['password'], server_name)
             if token:
                 check_token = token
                 break
-        
         if not check_token:
             return None
-        
         encrypted_uid = enc(target_uid)
         info = get_player_info(encrypted_uid, server_name, check_token)
-        
         if info:
             try:
                 data = json.loads(MessageToJson(info))
@@ -312,18 +305,15 @@ async def get_valid_token(uid, password, server_name="IND"):
         remaining = (cached["expires_at"] - datetime.utcnow()).total_seconds()
         if remaining > 1800:
             return cached["token"]
-    
     token = await generate_jwt_token(uid, password)
     if not token:
         return None
-    
     try:
         payload = jwt.decode(token, options={"verify_signature": False})
         exp = payload.get("exp")
         TOKEN_CACHE[cache_key] = {"token": token, "expires_at": datetime.utcfromtimestamp(exp)}
     except:
         TOKEN_CACHE[cache_key] = {"token": token, "expires_at": datetime.utcnow() + timedelta(hours=24)}
-    
     return token
 
 def encrypt_message(plaintext):
@@ -352,17 +342,12 @@ async def send_like_fast(encrypted_uid, token, url, account_uid, server_name):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, data=edata, headers=headers, timeout=3) as response:
                 if response.status == 200:
-                    if account_uid in account_status:
-                        account_status[account_uid]['status'] = 'working'
-                        account_status[account_uid]['last_check'] = datetime.now().isoformat()
-                        save_account_status()
                     return True
                 return False
     except:
         return False
 
 async def send_likes_all_accounts(target_uid, server_name, url):
-    """Send likes using ALL accounts - no limit"""
     accounts = load_accounts(server_name)
     if not accounts:
         return {'success': 0, 'failed': 0, 'total': 0}
@@ -378,9 +363,7 @@ async def send_likes_all_accounts(target_uid, server_name, url):
     if not fresh_accounts:
         return {'success': 0, 'failed': 0, 'total': len(accounts), 'skipped': skipped}
     
-    # Use ALL fresh accounts
     accounts_to_use = fresh_accounts
-    
     protobuf_message = create_protobuf_message(target_uid, server_name)
     encrypted_uid = encrypt_message(protobuf_message)
     
@@ -406,7 +389,6 @@ async def send_likes_all_accounts(target_uid, server_name, url):
         else:
             failed += 1
     
-    user_info = None
     if successful > 0:
         user_info = await get_user_info(target_uid, server_name)
         if user_info:
@@ -444,7 +426,6 @@ def decode_protobuf(binary):
 def get_player_info(encrypted_uid, server_name, token):
     base_url = REGION_URLS.get(server_name, 'https://clientbp.ggpolarbear.com')
     url = f"{base_url}/GetPlayerPersonalShow"
-    
     edata = bytes.fromhex(encrypted_uid)
     headers = {
         'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
@@ -460,25 +441,17 @@ def get_player_info(encrypted_uid, server_name, token):
         return None
 
 async def check_all_accounts_status(server="IND"):
+    # Just mark accounts as working without checking individual limits
     accounts = load_accounts(server)
-    for acc in accounts[:50]:
+    for acc in accounts:
         try:
             token = await get_valid_token(acc['uid'], acc['password'], server)
             if token:
-                base_url = REGION_URLS.get(server, 'https://clientbp.ggpolarbear.com')
-                protobuf_message = create_protobuf_message("3997461446", server)
-                encrypted_uid = encrypt_message(protobuf_message)
-                url = f"{base_url}/LikeProfile"
-                success = await send_like_fast(encrypted_uid, token, url, acc['uid'], server)
-                if success:
-                    account_status[acc['uid']] = {'status': 'working', 'last_check': datetime.now().isoformat()}
-                else:
-                    account_status[acc['uid']] = {'status': 'timeout', 'last_check': datetime.now().isoformat(),
-                                                  'reset_time': get_next_reset_time().isoformat()}
+                account_status[acc['uid']] = {'status': 'working', 'last_check': datetime.now().isoformat()}
             else:
                 account_status[acc['uid']] = {'status': 'unknown', 'last_check': datetime.now().isoformat()}
             save_account_status()
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
         except:
             continue
 
@@ -500,10 +473,8 @@ async def auto_like_daily():
             
             add_activity_log(f"🔄 Starting auto-like at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
             
-            # Process ALL users in queue (stay forever)
             for user_uid in auto_like_users:
                 add_activity_log(f"📱 Processing user: {user_uid}", "info")
-                
                 user_info_before = await get_user_info(user_uid, "IND")
                 before_likes = user_info_before.get('likes', 0) if user_info_before else 0
                 before_name = user_info_before.get('name', 'Unknown') if user_info_before else 'Unknown'
@@ -522,9 +493,6 @@ async def auto_like_daily():
                     update_user_stats(user_uid, likes_sent, username, after_likes)
                     add_to_history(user_uid, likes_sent, before_likes, after_likes, username, "IND")
                     add_activity_log(f"✅ {username} | Before: {before_likes} | After: {after_likes} | Gained: {after_likes - before_likes}", "success")
-                else:
-                    add_activity_log(f"⚠️ {user_uid} | Failed to get profile", "error")
-                
                 await asyncio.sleep(0.5)
             
             add_activity_log(f"✅ Auto-like cycle complete. Processed {len(auto_like_users)} users.", "success")
@@ -690,7 +658,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# DASHBOARD – NO 20 LIKES, SERVER SELECTOR AT TOP
+# PREMIUM DASHBOARD – NO WORKING/LIMIT CHECKS
 # ============================================================
 WEBSITE_HTML = '''
 <!DOCTYPE html>
@@ -757,7 +725,6 @@ WEBSITE_HTML = '''
             font-weight: 400;
         }
         
-        /* Server selector row */
         .server-selector-row {
             display: flex;
             justify-content: center;
@@ -770,17 +737,19 @@ WEBSITE_HTML = '''
             color: #A8B3CF;
             font-size: 0.85em;
             font-weight: 600;
+            letter-spacing: 0.5px;
         }
         .server-selector-row select {
-            padding: 8px 16px;
+            padding: 10px 20px;
             border-radius: 12px;
             border: 1px solid rgba(43,52,66,0.3);
             background: rgba(0,0,0,0.25);
             color: #F8FAFC;
             font-size: 0.9em;
             font-family: 'Inter', sans-serif;
-            min-width: 140px;
+            min-width: 150px;
             transition: 0.3s;
+            cursor: pointer;
         }
         .server-selector-row select:focus {
             outline: none;
@@ -788,17 +757,17 @@ WEBSITE_HTML = '''
         }
         .server-selector-row .server-status {
             background: rgba(22,27,34,0.6);
-            padding: 6px 16px;
+            padding: 8px 20px;
             border-radius: 20px;
             border: 1px solid rgba(43,52,66,0.3);
-            font-size: 0.75em;
+            font-size: 0.8em;
             color: #A8B3CF;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
-        .server-selector-row .server-status .server-name { color: #00E5FF; font-weight: 600; }
-        .server-selector-row .server-status .accounts-count { color: #00E676; font-weight: 600; }
+        .server-selector-row .server-status i { color: #00E5FF; }
+        .server-selector-row .server-status .accounts-count { color: #00E676; font-weight: 700; font-size: 1.1em; }
         
         .header-top {
             display: flex;
@@ -808,13 +777,13 @@ WEBSITE_HTML = '''
             margin-bottom: 8px;
         }
         .logout-btn {
-            padding: 6px 16px;
+            padding: 8px 20px;
             border: 1px solid rgba(43,52,66,0.3);
             border-radius: 12px;
             background: rgba(255,255,255,0.03);
             color: #A8B3CF;
             cursor: pointer;
-            font-size: 0.75em;
+            font-size: 0.8em;
             font-weight: 600;
             transition: 0.3s;
             font-family: 'Inter', sans-serif;
@@ -934,8 +903,6 @@ WEBSITE_HTML = '''
         }
         .stat-card .icon { font-size: 1.1em; margin-bottom: 4px; opacity: 0.4; }
         .num-accounts { color: #4D7CFE; }
-        .num-working { color: #00E676; }
-        .num-timeout { color: #FF4D6D; }
         .num-likes { color: #A855F7; }
         .num-targets { color: #FFC107; }
         .num-queue { color: #00E5FF; }
@@ -1016,24 +983,12 @@ WEBSITE_HTML = '''
             border: 1px solid rgba(255,77,109,0.1);
         }
         .btn-danger:hover { background: rgba(255,77,109,0.2); }
-        .btn-warning {
-            background: rgba(255,193,7,0.12);
-            color: #FFC107;
-            border: 1px solid rgba(255,193,7,0.1);
-        }
-        .btn-warning:hover { background: rgba(255,193,7,0.2); }
         .btn-rocket {
             background: linear-gradient(135deg, #FF4D6D, #FF6B8A);
             color: #0D1117;
             border: none;
         }
         .btn-rocket:hover { box-shadow: 0 0 30px rgba(255,77,109,0.2); transform: scale(1.02); }
-        .btn-ghost {
-            background: rgba(255,255,255,0.03);
-            color: #A8B3CF;
-            border: 1px solid rgba(43,52,66,0.3);
-        }
-        .btn-ghost:hover { background: rgba(255,255,255,0.06); color: #F8FAFC; }
         
         .user-list {
             display: flex;
@@ -1065,42 +1020,6 @@ WEBSITE_HTML = '''
             padding: 0 4px;
             font-size: 1em;
         }
-        
-        .table-wrap { overflow-x: auto; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: rgba(0,0,0,0.15);
-            border-radius: 12px;
-            overflow: hidden;
-            margin-top: 10px;
-            font-size: 0.85em;
-        }
-        th {
-            background: rgba(0,229,255,0.03);
-            padding: 10px 16px;
-            text-align: left;
-            font-weight: 600;
-            color: #A8B3CF;
-            border-bottom: 1px solid rgba(43,52,66,0.3);
-            text-transform: uppercase;
-            font-size: 0.7em;
-            letter-spacing: 0.8px;
-        }
-        td { padding: 10px 16px; border-bottom: 1px solid rgba(43,52,66,0.15); }
-        .badge {
-            padding: 2px 12px;
-            border-radius: 20px;
-            font-size: 0.65em;
-            font-weight: 600;
-            display: inline-block;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .badge-working { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.06); }
-        .badge-timeout { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.06); }
-        .badge-reset { background: rgba(255,193,7,0.12); color: #FFC107; border: 1px solid rgba(255,193,7,0.06); }
-        .badge-unknown { background: rgba(168,179,207,0.12); color: #A8B3CF; border: 1px solid rgba(168,179,207,0.06); }
         
         .section-title {
             font-size: 1em;
@@ -1255,13 +1174,13 @@ WEBSITE_HTML = '''
 </head>
 <body>
     <div class="main">
-        <!-- Title Centered -->
+        <!-- Title -->
         <div class="title-section">
             <h1>HEX CHEATS</h1>
             <div class="sub-title">Like Bot System</div>
         </div>
         
-        <!-- Server Selector Row -->
+        <!-- Server Selector -->
         <div class="server-selector-row">
             <label for="server-select-main"><i class="fas fa-globe"></i> Select Server:</label>
             <select id="server-select-main" onchange="changeServer(this.value)">
@@ -1275,7 +1194,7 @@ WEBSITE_HTML = '''
                 <option value="RU">Russia</option>
             </select>
             <div class="server-status">
-                <i class="fas fa-server"></i>
+                <i class="fas fa-users"></i>
                 Accounts: <span class="accounts-count" id="server-accounts">0</span>
             </div>
             <a href="/logout"><button class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</button></a>
@@ -1288,14 +1207,13 @@ WEBSITE_HTML = '''
             <div class="item"><i class="fas fa-comment"></i> Message: <span id="autoRunMessage">-</span></div>
         </div>
         
-        <!-- Navigation (NO 20 LIKES) -->
+        <!-- Navigation -->
         <div class="nav-grid">
             <button class="nav-btn active-nav" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</button>
-            <button class="nav-btn" onclick="showSection('unlimited')"><i class="fas fa-infinity"></i> Unlimited Likes</button>
+            <button class="nav-btn" onclick="showSection('unlimited')"><i class="fas fa-infinity"></i> Unlimited</button>
             <button class="nav-btn" onclick="showSection('auto')"><i class="fas fa-clock"></i> Auto Like</button>
             <button class="nav-btn" onclick="showSection('verify')"><i class="fas fa-check-double"></i> Verify</button>
             <button class="nav-btn" onclick="showSection('history')"><i class="fas fa-history"></i> History</button>
-            <button class="nav-btn" onclick="showSection('accounts')"><i class="fas fa-users"></i> Accounts</button>
             <button class="nav-btn" onclick="showSection('stats')"><i class="fas fa-chart-bar"></i> Stats</button>
             <button class="nav-btn" onclick="showSection('logs')"><i class="fas fa-terminal"></i> Logs</button>
             <button class="nav-btn" onclick="showSection('settings')"><i class="fas fa-cog"></i> Settings</button>
@@ -1305,21 +1223,19 @@ WEBSITE_HTML = '''
         <div id="section-dashboard" class="section active">
             <div class="stats-grid">
                 <div class="stat-card"><div class="icon" style="color:#4D7CFE;"><i class="fas fa-users"></i></div><div class="num num-accounts" id="total-accounts">0</div><div class="lbl">Accounts</div></div>
-                <div class="stat-card"><div class="icon" style="color:#00E676;"><i class="fas fa-check-circle"></i></div><div class="num num-working" id="working-count">0</div><div class="lbl">Working</div></div>
-                <div class="stat-card"><div class="icon" style="color:#FF4D6D;"><i class="fas fa-exclamation-triangle"></i></div><div class="num num-timeout" id="timeout-count">0</div><div class="lbl">Limit</div></div>
                 <div class="stat-card"><div class="icon" style="color:#A855F7;"><i class="fas fa-heart"></i></div><div class="num num-likes" id="total-likes">0</div><div class="lbl">Likes</div></div>
                 <div class="stat-card"><div class="icon" style="color:#FFC107;"><i class="fas fa-bullseye"></i></div><div class="num num-targets" id="targets-liked">0</div><div class="lbl">Targets</div></div>
                 <div class="stat-card"><div class="icon" style="color:#00E5FF;"><i class="fas fa-list-ul"></i></div><div class="num num-queue" id="auto-users">0</div><div class="lbl">Queue</div></div>
             </div>
         </div>
         
-        <!-- Unlimited Likes (Manual) -->
+        <!-- Unlimited Likes -->
         <div id="section-unlimited" class="section">
             <div class="panel">
                 <h2><i class="fas fa-infinity"></i> Unlimited Likes</h2>
                 <div class="input-group">
-                    <input type="number" id="target-uid-unlimited" placeholder="Enter Target Free Fire UID" />
-                    <select id="server-unlimited" style="min-width:120px;">
+                    <input type="number" id="target-uid-unlimited" placeholder="Enter Target UID" />
+                    <select id="server-unlimited">
                         <option value="IND">India</option>
                         <option value="BD">Bangladesh</option>
                         <option value="MENA">MENA</option>
@@ -1329,9 +1245,9 @@ WEBSITE_HTML = '''
                         <option value="NA">NA</option>
                         <option value="RU">Russia</option>
                     </select>
-                    <button class="btn btn-rocket" onclick="sendUnlimited()"><i class="fas fa-rocket"></i> Send All Likes</button>
+                    <button class="btn btn-rocket" onclick="sendUnlimited()"><i class="fas fa-rocket"></i> Send All</button>
                 </div>
-                <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID. One by one, fast.</div>
+                <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts.</div>
             </div>
         </div>
         
@@ -1339,14 +1255,14 @@ WEBSITE_HTML = '''
         <div id="section-auto" class="section">
             <div class="panel">
                 <h2><i class="fas fa-clock"></i> Auto Like</h2>
-                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Daily at custom time. All accounts send ALL likes to queued UIDs.</p>
+                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Daily at custom time. All accounts send ALL likes.</p>
                 <div class="input-group">
                     <input type="number" id="target-uid-auto" placeholder="Enter Target UID" />
                     <button class="btn btn-success" onclick="addAutoUser()"><i class="fas fa-plus"></i> Add</button>
                     <button class="btn btn-danger" onclick="deleteAllAuto()"><i class="fas fa-trash"></i> Clear All</button>
                 </div>
                 <div class="user-list" id="auto-user-list"></div>
-                <div class="note"><i class="fas fa-info-circle"></i> UIDs stay in queue forever. Only manual removal deletes them. Uses ALL accounts.</div>
+                <div class="note"><i class="fas fa-info-circle"></i> UIDs stay in queue forever. Only manual removal deletes them.</div>
             </div>
         </div>
         
@@ -1355,7 +1271,7 @@ WEBSITE_HTML = '''
             <div class="panel">
                 <h2><i class="fas fa-check-double"></i> Verify Likes</h2>
                 <div class="input-group">
-                    <input type="number" id="target-uid-verify" placeholder="Enter Free Fire UID" />
+                    <input type="number" id="target-uid-verify" placeholder="Enter UID" />
                     <select id="server-verify">
                         <option value="IND">India</option>
                         <option value="BD">Bangladesh</option>
@@ -1377,17 +1293,6 @@ WEBSITE_HTML = '''
             <div class="panel">
                 <h2><i class="fas fa-history"></i> Like History</h2>
                 <div id="history-list"></div>
-            </div>
-        </div>
-        
-        <!-- Accounts -->
-        <div id="section-accounts" class="section">
-            <div class="section-title"><i class="fas fa-users"></i> Account Status <span class="live-dot"></span></div>
-            <div class="glass" style="padding:0; overflow:hidden;">
-                <table>
-                    <thead><tr><th>UID</th><th>Status</th><th>Last Check</th><th>Reset Time</th></tr></thead>
-                    <tbody id="account-table"></tbody>
-                </table>
             </div>
         </div>
         
@@ -1416,8 +1321,8 @@ WEBSITE_HTML = '''
                 <div style="margin-bottom:12px;">
                     <label style="color:#A8B3CF; font-size:0.85em;">Auto-Like Time (IST)</label>
                     <div class="input-group" style="margin-top:6px;">
-                        <input type="number" id="set-hour" placeholder="Hour (0-23)" value="4" style="width:80px;" />
-                        <input type="number" id="set-minute" placeholder="Minute (0-59)" value="0" style="width:80px;" />
+                        <input type="number" id="set-hour" placeholder="Hour" value="4" style="width:80px;" />
+                        <input type="number" id="set-minute" placeholder="Minute" value="0" style="width:80px;" />
                         <button class="btn btn-primary" onclick="setAutoTime()"><i class="fas fa-save"></i> Save Time</button>
                     </div>
                     <div style="margin-top:8px; font-size:0.8em; color:#4a5a7a;">
@@ -1446,27 +1351,16 @@ WEBSITE_HTML = '''
     </div>
 
     <script>
-        // ============================================
-        // UI FUNCTIONS
-        // ============================================
         let currentServer = 'IND';
         
         function changeServer(server) {
             currentServer = server;
-            // Update all server selects
             document.querySelectorAll('select[id^="server-"]').forEach(sel => {
                 sel.value = server;
             });
             document.getElementById('server-select-main').value = server;
             loadData();
-            // Also reload account status
             checkStatus();
-        }
-        
-        function updateServerStatus(server) {
-            currentServer = server;
-            document.getElementById('server-select-main').value = server;
-            loadData();
         }
         
         function showSection(id) {
@@ -1495,17 +1389,12 @@ WEBSITE_HTML = '''
                 });
         }
         
-        // ============================================
-        // DATA LOADING
-        // ============================================
         function loadData() {
             fetch('/api/dashboard-data?server=' + currentServer)
                 .then(res => res.json())
                 .then(data => {
                     if (data.error) return;
                     document.getElementById('total-accounts').textContent = data.total_accounts || 0;
-                    document.getElementById('working-count').textContent = data.working_count || 0;
-                    document.getElementById('timeout-count').textContent = data.timeout_count || 0;
                     document.getElementById('total-likes').textContent = data.total_likes || 0;
                     document.getElementById('targets-liked').textContent = data.targets_liked || 0;
                     document.getElementById('auto-users').textContent = data.auto_users || 0;
@@ -1514,7 +1403,6 @@ WEBSITE_HTML = '''
                     document.getElementById('autoRunStatus').textContent = data.auto_run_status || 'Idle';
                     document.getElementById('autoRunMessage').textContent = data.auto_run_message || '-';
                     
-                    // Auto queue
                     let userHtml = '';
                     if (data.users && data.users.length > 0) {
                         data.users.forEach(user => {
@@ -1525,18 +1413,6 @@ WEBSITE_HTML = '''
                         userHtml = '<div class="note">No users in auto-queue</div>';
                     }
                     document.getElementById('auto-user-list').innerHTML = userHtml;
-                    
-                    // Accounts table
-                    let tableHtml = '';
-                    if (data.accounts && data.accounts.length > 0) {
-                        data.accounts.forEach(acc => {
-                            const cls = acc.status === 'working' ? 'working' : acc.status === 'timeout' ? 'timeout' : 'unknown';
-                            tableHtml += `<tr><td><strong>${acc.uid}</strong></td><td><span class="badge badge-${cls}">${acc.status}</span></td><td>${acc.last_check ? formatTime(acc.last_check) : 'Never'}</td><td>${acc.reset_time ? formatTime(acc.reset_time) : 'N/A'}</td></tr>`;
-                        });
-                    } else {
-                        tableHtml = '<tr><td colspan="4">No accounts loaded</td></tr>';
-                    }
-                    document.getElementById('account-table').innerHTML = tableHtml;
                 });
         }
         
@@ -1574,11 +1450,7 @@ WEBSITE_HTML = '''
                             <span style="color:#00E676;font-weight:600;">${data.total_targets}</span>
                         </div>
                         <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                            <span style="color:#A8B3CF;">Working Accounts</span>
-                            <span style="color:#00E676;font-weight:600;">${data.working_accounts}</span>
-                        </div>
-                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                            <span style="color:#A8B3CF;">Auto Queue Users</span>
+                            <span style="color:#A8B3CF;">Queue Users</span>
                             <span style="color:#00E676;font-weight:600;">${data.auto_users}</span>
                         </div>
                         <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;">
@@ -1607,9 +1479,6 @@ WEBSITE_HTML = '''
                 });
         }
         
-        // ============================================
-        // RESULT MODAL
-        // ============================================
         function showResult(data) {
             document.getElementById('res-name').textContent = data.username || 'Unknown';
             document.getElementById('res-sent').textContent = data.likes_sent || 0;
@@ -1623,22 +1492,7 @@ WEBSITE_HTML = '''
         function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
         document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
         
-        // ============================================
-        // ACTIONS
-        // ============================================
-        function getServer() {
-            return currentServer;
-        }
-        
-        function getUid(sectionId) {
-            const activeSection = document.querySelector('.section.active');
-            if (activeSection) {
-                const id = activeSection.id;
-                if (id === 'section-unlimited') return document.getElementById('target-uid-unlimited').value.trim();
-                if (id === 'section-verify') return document.getElementById('target-uid-verify').value.trim();
-            }
-            return '';
-        }
+        function getServer() { return currentServer; }
         
         function sendUnlimited() {
             const uid = document.getElementById('target-uid-unlimited').value.trim();
@@ -1654,7 +1508,7 @@ WEBSITE_HTML = '''
             fetch('/send-likes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid, server_name: server, key: 'JMLB', count: 999999 })
+                body: JSON.stringify({ uid, server_name: server, key: 'JMLB' })
             })
             .then(res => res.json())
             .then(data => {
@@ -1743,15 +1597,11 @@ WEBSITE_HTML = '''
             fetch('/api/check-status?server=' + currentServer)
                 .then(res => res.json())
                 .then(data => {
-                    console.log('Status check started for ' + currentServer);
+                    console.log('Status check started');
                     setTimeout(loadData, 3000);
                 });
         }
         
-        // ============================================
-        // INIT
-        // ============================================
-        // Set initial server from dropdown
         document.addEventListener('DOMContentLoaded', function() {
             const sel = document.getElementById('server-select-main');
             currentServer = sel.value;
@@ -1779,12 +1629,10 @@ def index():
 def login():
     username = request.form.get('username')
     password = request.form.get('password')
-    
     if username == 'HexMods' and password == 'ADI444':
         session['logged_in'] = True
         add_activity_log("✅ User HexMods logged in", "success")
         return redirect('/')
-    
     return redirect('/?error=1')
 
 @app.route('/logout')
@@ -1797,38 +1645,26 @@ def logout():
 def dashboard_data():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
-    
     server = request.args.get('server', 'IND')
     accounts = load_accounts(server)
     if not accounts:
         return jsonify({'error': f'No accounts found for server {server}'})
-    
     total = len(accounts)
-    working_count = 0
-    timeout_count = 0
     account_list = []
     for acc in accounts:
         uid = acc['uid']
         status_info = account_status.get(uid, {'status': 'unknown'})
-        status = status_info.get('status', 'unknown')
-        if status == 'working':
-            working_count += 1
-        elif status == 'timeout':
-            timeout_count += 1
         account_list.append({
             'uid': uid,
-            'status': status,
+            'status': status_info.get('status', 'unknown'),
             'last_check': status_info.get('last_check'),
             'reset_time': status_info.get('reset_time')
         })
     total_likes = sum(len(v) for v in liked_cache.values())
     targets_liked = len(liked_cache)
     next_reset = get_next_reset_time().strftime('%Y-%m-%d %H:%M:%S IST')
-    
     return jsonify({
         'total_accounts': total,
-        'working_count': working_count,
-        'timeout_count': timeout_count,
         'total_likes': total_likes,
         'targets_liked': targets_liked,
         'auto_users': len(auto_like_users),
@@ -1862,14 +1698,11 @@ def get_history():
 def get_stats():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
-    
     total_likes = sum(len(v) for v in liked_cache.values())
     total_targets = len(liked_cache)
-    working = sum(1 for v in account_status.values() if v.get('status') == 'working')
     return jsonify({
         'total_likes_sent': total_likes,
         'total_targets': total_targets,
-        'working_accounts': working,
         'auto_users': len(auto_like_users),
         'next_reset': get_next_reset_time().strftime('%Y-%m-%d %H:%M:%S IST')
     })
@@ -1892,7 +1725,6 @@ def check_status_api():
 def verify_likes():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
-    
     data = request.get_json()
     uid = data.get('uid', '').strip()
     server_name = data.get('server_name', 'IND').upper()
@@ -1914,30 +1746,22 @@ def verify_likes():
 def send_likes():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     data = request.get_json()
     uid = data.get('uid', '').strip()
     server_name = data.get('server_name', 'IND').upper()
     key = data.get('key', 'JMLB')
-    count = int(data.get('count', 0))
-    
     if key != "JMLB":
         return jsonify({'success': False, 'error': 'Invalid key'})
     if not uid:
         return jsonify({'success': False, 'error': 'UID required'})
     
     user_info_before = asyncio.run(get_user_info(uid, server_name))
-    if user_info_before:
-        before_likes = user_info_before.get('likes', 0)
-        before_name = user_info_before.get('name', 'Unknown')
-    else:
-        before_likes = 0
-        before_name = 'Unknown'
+    before_likes = user_info_before.get('likes', 0) if user_info_before else 0
+    before_name = user_info_before.get('name', 'Unknown') if user_info_before else 'Unknown'
     
     base_url = REGION_URLS.get(server_name, 'https://clientbp.ggpolarbear.com')
     like_url = f"{base_url}/LikeProfile"
     
-    # Send ALL likes (count is ignored for unlimited)
     result = asyncio.run(send_likes_all_accounts(uid, server_name, like_url))
     likes_sent = result['success']
     
@@ -1960,15 +1784,13 @@ def send_likes():
         'likes_before': before_likes,
         'verified_added': after_likes - before_likes,
         'failed': result.get('failed', 0),
-        'server': server_name,
-        'stopped': False
+        'server': server_name
     })
 
 @app.route('/add-auto-user', methods=['POST'])
 def add_auto_user():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     data = request.get_json()
     uid = data.get('uid', '').strip()
     if not uid:
@@ -1985,7 +1807,6 @@ def add_auto_user():
 def delete_user():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     data = request.get_json()
     uid = data.get('uid', '').strip()
     if uid in auto_like_users:
@@ -2001,7 +1822,6 @@ def delete_user():
 def delete_all_users():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     auto_like_users.clear()
     user_stats.clear()
     save_users()
@@ -2012,7 +1832,6 @@ def delete_all_users():
 def set_auto_time():
     if not session.get('logged_in'):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    
     data = request.get_json()
     hour = data.get('hour', 4)
     minute = data.get('minute', 0)
@@ -2025,9 +1844,6 @@ def handle_requests():
     server_name = request.args.get("server_name", "").upper()
     key = request.args.get("key")
     client_ip = request.remote_addr
-    likes_param = request.args.get("likes")
-    requested_likes = int(likes_param) if likes_param and likes_param.isdigit() else None
-
     if key != "JMLB":
         return jsonify({"error": "Invalid API key"}), 403
     if not uid or not server_name:
@@ -2035,11 +1851,9 @@ def handle_requests():
     valid_servers = ["IND", "BR", "US", "SAC", "NA", "BD", "RU", "MENA"]
     if server_name not in valid_servers:
         return jsonify({"error": f"Invalid server. Use: {valid_servers}"}), 400
-
     accounts = load_accounts(server_name)
     if not accounts:
         return jsonify({"error": f"No accounts for {server_name}"}), 500
-
     today_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     count, last_reset = tracker[client_ip]
     if last_reset < today_midnight:
@@ -2047,7 +1861,6 @@ def handle_requests():
         count = 0
     if count >= KEY_LIMIT:
         return jsonify({"error": "Daily limit reached", "remains": f"(0/{KEY_LIMIT})"}), 429
-
     check_token = None
     for account in accounts[:3]:
         check_token = asyncio.run(get_valid_token(account['uid'], account['password'], server_name))
@@ -2055,7 +1868,6 @@ def handle_requests():
             break
     if not check_token:
         return jsonify({"error": "No valid accounts"}), 500
-
     encrypted_uid = enc(uid)
     before = get_player_info(encrypted_uid, server_name, check_token)
     if before is None:
@@ -2066,13 +1878,10 @@ def handle_requests():
         before_name = before_data['AccountInfo'].get('PlayerNickname', 'Unknown')
     except:
         return jsonify({"error": "Data parsing failed", "status": 0}), 200
-
     base_url = REGION_URLS.get(server_name, 'https://clientbp.ggpolarbear.com')
     like_url = f"{base_url}/LikeProfile"
-
     result = asyncio.run(send_likes_all_accounts(uid, server_name, like_url))
     success_count = result['success']
-
     after = get_player_info(encrypted_uid, server_name, check_token)
     if after is None:
         return jsonify({"error": "Could not verify likes", "status": 0}), 200
@@ -2085,13 +1894,10 @@ def handle_requests():
         status = 1 if success_count > 0 else 2
     except Exception as e:
         return jsonify({"error": str(e), "status": 0}), 500
-
     if success_count > 0:
         tracker[client_ip][0] += 1
         count += 1
-
     add_to_history(uid, success_count, before_like, after_like, player_name, server_name)
-
     return jsonify({
         "LikesGivenByAPI": success_count,
         "VerifiedLikesAdded": like_given,
@@ -2102,7 +1908,6 @@ def handle_requests():
         "status": status,
         "remains": f"({KEY_LIMIT - count}/{KEY_LIMIT})",
         "total_accounts": len(accounts),
-        "limit_requested": requested_likes if requested_likes else "all",
         "skipped_24hr": result.get('skipped', 0),
         "accounts_used": result.get('accounts_used', 0),
         "failed": result.get('failed', 0),
@@ -2135,7 +1940,6 @@ reset_thread.start()
 auto_thread = threading.Thread(target=start_auto_like, daemon=True)
 auto_thread.start()
 
-# Initial status check for all servers (just IND by default)
 threading.Thread(target=run_status_check, args=("IND",)).start()
 
 add_activity_log("🚀 HEX CHEATS System Started", "info")
@@ -2143,7 +1947,7 @@ add_activity_log(f"📁 Accounts: {len(load_accounts('IND'))} (IND)", "info")
 add_activity_log(f"📌 Auto-queue: {len(auto_like_users)} users", "info")
 add_activity_log(f"⏰ Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
 
-print("✅ HEX CHEATS – Final Fixed Version Started")
+print("✅ HEX CHEATS – Premium Dashboard Started")
 print(f"📁 Accounts: {len(load_accounts('IND'))} (IND)")
 print("🔐 Login: HexMods / ADI444")
 print(f"⏰ Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
