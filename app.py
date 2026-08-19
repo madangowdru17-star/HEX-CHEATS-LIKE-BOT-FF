@@ -20,6 +20,8 @@ import jwt
 from datetime import timedelta
 import pickle
 import threading
+import hashlib
+import secrets
 
 app = Flask(__name__)
 app.secret_key = 'hex-cheats-secret-key-2024'
@@ -39,6 +41,11 @@ USERS_FILE = "users.pkl"
 auto_like_users = []
 user_stats = {}
 like_history = []
+
+# User Database
+USER_DB_FILE = "user_db.pkl"
+user_db = {}  # email -> {'password': hashed, 'codes': [], 'usage': 0, 'last_active': timestamp, 'auto_like_targets': []}
+admin_codes = []  # List of active admin codes
 
 AUTO_LIKE_HOUR = 4
 AUTO_LIKE_MINUTE = 0
@@ -65,6 +72,76 @@ def add_activity_log(message, log_type="info"):
     if len(activity_logs) > 100:
         activity_logs.pop(0)
     print(f"[{timestamp}] [{log_type.upper()}] {message}")
+
+def load_user_db():
+    global user_db, admin_codes
+    try:
+        if os.path.exists(USER_DB_FILE):
+            with open(USER_DB_FILE, 'rb') as f:
+                data = pickle.load(f)
+                user_db = data.get('users', {})
+                admin_codes = data.get('codes', [])
+                print(f"Loaded {len(user_db)} users, {len(admin_codes)} codes")
+        else:
+            user_db = {}
+            admin_codes = []
+            save_user_db()
+    except Exception as e:
+        print(f"Error loading user db: {e}")
+        user_db = {}
+        admin_codes = []
+
+def save_user_db():
+    try:
+        data = {
+            'users': user_db,
+            'codes': admin_codes
+        }
+        with open(USER_DB_FILE, 'wb') as f:
+            pickle.dump(data, f)
+    except Exception as e:
+        print(f"Error saving user db: {e}")
+
+def generate_admin_code():
+    code = secrets.token_hex(8).upper()
+    admin_codes.append(code)
+    save_user_db()
+    add_activity_log(f"🔑 Generated admin code: {code}", "info")
+    return code
+
+def verify_admin_code(code):
+    if code in admin_codes:
+        admin_codes.remove(code)
+        save_user_db()
+        add_activity_log(f"✅ Admin code used: {code}", "success")
+        return True
+    return False
+
+def create_user(email, password):
+    if email in user_db:
+        return False
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+    user_db[email] = {
+        'password': hashed,
+        'codes': [],
+        'usage': 0,
+        'last_active': datetime.now().isoformat(),
+        'auto_like_targets': [],
+        'created_at': datetime.now().isoformat()
+    }
+    save_user_db()
+    add_activity_log(f"👤 New user registered: {email}", "info")
+    return True
+
+def verify_user(email, password):
+    if email not in user_db:
+        return False
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+    if user_db[email]['password'] == hashed:
+        user_db[email]['last_active'] = datetime.now().isoformat()
+        save_user_db()
+        return True
+    return False
 
 def load_users():
     global auto_like_users, user_stats, like_history
@@ -512,7 +589,410 @@ def set_auto_time(hour, minute):
     return f"Auto-like time set to {hour:02d}:{minute:02d} IST"
 
 # ============================================================
-# LOGIN PAGE
+# PUBLIC PAGE
+# ============================================================
+PUBLIC_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEX CHEATS - Like Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0D1117;
+            color: #F8FAFC;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
+                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+        }
+        .main { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .title-section { text-align: center; padding: 20px 0; }
+        .title-section h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.8em;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00E5FF, #00E676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 4px;
+            animation: titleGlow 3s ease-in-out infinite;
+        }
+        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
+        .title-section .sub-title { font-size: 0.9em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
+        
+        .glass {
+            background: rgba(22,27,34,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(43,52,66,0.4);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            border-radius: 16px;
+            transition: 0.3s;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .glass:hover { border-color: rgba(0,229,255,0.12); }
+        
+        .server-status-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            padding: 10px 0;
+            margin-bottom: 10px;
+        }
+        .server-status-bar .status-item {
+            background: rgba(0,0,0,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            color: #A8B3CF;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .server-status-bar .status-item i { color: #00E5FF; }
+        .server-status-bar .status-item .count { color: #00E676; font-weight: 700; }
+        
+        .input-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-group input, .input-group select {
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(43,52,66,0.3);
+            background: rgba(0,0,0,0.25);
+            color: #F8FAFC;
+            font-size: 1em;
+            font-family: 'Inter', sans-serif;
+            min-width: 140px;
+            transition: 0.3s;
+            flex: 1;
+        }
+        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
+        .input-group select option { background: #0D1117; }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 1em;
+            transition: 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.3px;
+            min-height: 48px;
+            white-space: nowrap;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-rocket {
+            background: linear-gradient(135deg, #00E5FF, #00E676);
+            color: #0D1117;
+            border: none;
+        }
+        .btn-rocket:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
+        .btn-telegram { background: rgba(0,136,204,0.15); color: #00BFFF; border: 1px solid rgba(0,136,204,0.2); }
+        .btn-telegram:hover { background: rgba(0,136,204,0.25); }
+        .btn-youtube { background: rgba(255,0,0,0.15); color: #FF4444; border: 1px solid rgba(255,0,0,0.2); }
+        .btn-youtube:hover { background: rgba(255,0,0,0.25); }
+        
+        .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
+        
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .social-links a { text-decoration: none; }
+        
+        .result-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+        .result-modal.active { display: flex; }
+        .result-box {
+            background: #161B22;
+            padding: 35px 40px;
+            border-radius: 18px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(43,52,66,0.4);
+            box-shadow: 0 0 60px rgba(0,229,255,0.03);
+            animation: fadeInUp 0.4s ease;
+        }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .result-box h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1em;
+            color: #00E5FF;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .result-box .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(43,52,66,0.2);
+        }
+        .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
+        .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
+        .result-box .row .value-failed { color: #FF4D6D; }
+        .result-box .close-btn {
+            margin-top: 16px;
+            padding: 10px;
+            background: rgba(255,255,255,0.04);
+            color: #A8B3CF;
+            border: 1px solid rgba(43,52,66,0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+            transition: 0.3s;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+        }
+        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+            font-size: 0.8em;
+            color: #4a5a7a;
+        }
+        .footer-links a { color: #00E5FF; text-decoration: none; }
+        .footer-links a:hover { text-decoration: underline; }
+        
+        @media (max-width: 768px) {
+            .main { padding: 20px 15px; }
+            .title-section h1 { font-size: 2em; }
+            .glass { padding: 20px; }
+            .input-group input { min-width: 100px; font-size: 0.9em; }
+            .btn { font-size: 0.85em; padding: 10px 16px; min-height: 40px; }
+            .result-box { padding: 20px; }
+            .server-status-bar { gap: 8px; }
+            .server-status-bar .status-item { font-size: 0.7em; padding: 4px 12px; }
+            .social-links .btn { font-size: 0.8em; padding: 8px 14px; }
+        }
+        @media (max-width: 480px) {
+            .title-section h1 { font-size: 1.5em; }
+            .title-section .sub-title { font-size: 0.6em; letter-spacing: 4px; }
+            .input-group { flex-direction: column; }
+            .input-group input, .input-group select { width: 100%; }
+            .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="title-section">
+            <h1>HEX CHEATS</h1>
+            <div class="sub-title">Like Bot System</div>
+        </div>
+        
+        <!-- Server Status -->
+        <div class="server-status-bar">
+            <div class="status-item"><i class="fas fa-server"></i> Server: <span style="color:#00E5FF;font-weight:600;" id="pub-server">IND</span></div>
+            <div class="status-item"><i class="fas fa-users"></i> Accounts: <span class="count" id="pub-accounts">0</span></div>
+        </div>
+        
+        <div class="glass">
+            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                <i class="fas fa-rocket" style="color:#00E5FF;"></i> Send Likes
+            </h2>
+            <div class="input-group">
+                <input type="number" id="target-uid" placeholder="Enter Target UID" />
+                <select id="server-select" onchange="updateServerStatus(this.value)">
+                    <option value="IND">India</option>
+                    <option value="BD">Bangladesh</option>
+                    <option value="MENA">MENA</option>
+                    <option value="BR">Brazil</option>
+                    <option value="US">US</option>
+                    <option value="SAC">SAC</option>
+                    <option value="NA">NA</option>
+                    <option value="RU">Russia</option>
+                </select>
+                <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-paper-plane"></i> Send</button>
+            </div>
+            <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
+        </div>
+        
+        <div class="glass">
+            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
+            </h2>
+            <div class="input-group">
+                <input type="number" id="verify-uid" placeholder="Enter UID" />
+                <select id="verify-server" onchange="updateServerStatus(this.value)">
+                    <option value="IND">India</option>
+                    <option value="BD">Bangladesh</option>
+                    <option value="MENA">MENA</option>
+                    <option value="BR">Brazil</option>
+                    <option value="US">US</option>
+                    <option value="SAC">SAC</option>
+                    <option value="NA">NA</option>
+                    <option value="RU">Russia</option>
+                </select>
+                <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
+            </div>
+            <div id="verify-result" style="margin-top:12px;"></div>
+        </div>
+        
+        <!-- Social Links -->
+        <div class="social-links">
+            <a href="https://t.me/+dP7xLb3AoE1jNmRl" target="_blank">
+                <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Join Telegram</button>
+            </a>
+            <a href="https://t.me/HeX_CiPhEr" target="_blank">
+                <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Contact</button>
+            </a>
+            <a href="https://youtube.com/@define_hex?si=EJ86nAHxM29GfMqh" target="_blank">
+                <button class="btn btn-youtube"><i class="fab fa-youtube"></i> YouTube</button>
+            </a>
+        </div>
+        
+        <div class="footer-links">
+            <a href="/admin">Admin Login</a>
+        </div>
+    </div>
+    
+    <div class="result-modal" id="resultModal">
+        <div class="result-box">
+            <h2><i class="fas fa-check-circle"></i> Like Result</h2>
+            <div id="result-content">
+                <div class="row"><span class="label">Player Name</span><span class="value" id="res-name">-</span></div>
+                <div class="row"><span class="label">Likes Sent</span><span class="value" id="res-sent">0</span></div>
+                <div class="row"><span class="label">Likes Before</span><span class="value" id="res-before">0</span></div>
+                <div class="row"><span class="label">Likes After</span><span class="value" id="res-after">0</span></div>
+                <div class="row"><span class="label">Verified Added</span><span class="value" id="res-added">0</span></div>
+                <div class="row"><span class="label">Failed</span><span class="value value-failed" id="res-failed">0</span></div>
+            </div>
+            <button class="close-btn" onclick="closeResult()"><i class="fas fa-times"></i> Close</button>
+        </div>
+    </div>
+
+    <script>
+        let currentServer = 'IND';
+        
+        function updateServerStatus(server) {
+            currentServer = server;
+            document.getElementById('pub-server').textContent = server;
+            document.querySelectorAll('#server-select, #verify-server').forEach(el => el.value = server);
+            loadPublicData();
+        }
+        
+        function loadPublicData() {
+            fetch('/api/public-data?server=' + currentServer)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) return;
+                    document.getElementById('pub-accounts').textContent = data.total_accounts || 0;
+                });
+        }
+        
+        function showResult(data) {
+            document.getElementById('res-name').textContent = data.username || 'Unknown';
+            document.getElementById('res-sent').textContent = data.likes_sent || 0;
+            document.getElementById('res-before').textContent = data.likes_before || 0;
+            document.getElementById('res-after').textContent = data.total_likes || 0;
+            document.getElementById('res-added').textContent = data.verified_added || 0;
+            document.getElementById('res-failed').textContent = data.failed || 0;
+            document.getElementById('resultModal').classList.add('active');
+        }
+        
+        function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
+        document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
+        
+        function sendLikes() {
+            const uid = document.getElementById('target-uid').value.trim();
+            const server = document.getElementById('server-select').value;
+            if (!uid) { alert('Enter a target UID'); return; }
+            if (!confirm(`Send likes to ${uid} on ${server}?`)) return;
+            
+            const btn = document.querySelector('.btn-rocket');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            btn.disabled = true;
+            
+            fetch('/api/public-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, server_name: server })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                if (data.success) {
+                    showResult(data);
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            });
+        }
+        
+        function verifyProfile() {
+            const uid = document.getElementById('verify-uid').value.trim();
+            const server = document.getElementById('verify-server').value;
+            if (!uid) { alert('Enter a UID'); return; }
+            
+            fetch('/api/public-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, server_name: server })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    return;
+                }
+                document.getElementById('verify-result').innerHTML = `
+                    <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
+                        <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
+                        <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
+                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
+                            <span>Total Likes</span>
+                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        loadPublicData();
+        setInterval(loadPublicData, 10000);
+    </script>
+</body>
+</html>
+'''
+
+# ============================================================
+# LOGIN PAGE (Admin)
 # ============================================================
 LOGIN_HTML = '''
 <!DOCTYPE html>
@@ -621,325 +1101,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# PUBLIC PAGE (No Login Required)
-# ============================================================
-PUBLIC_HTML = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEX CHEATS - Like Bot</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #0D1117;
-            color: #F8FAFC;
-            min-height: 100vh;
-            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
-                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
-        }
-        .main { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
-        .title-section { text-align: center; padding: 20px 0; }
-        .title-section h1 {
-            font-family: 'Orbitron', monospace;
-            font-size: 2.8em;
-            font-weight: 900;
-            background: linear-gradient(135deg, #00E5FF, #00E676);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: 4px;
-            animation: titleGlow 3s ease-in-out infinite;
-        }
-        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
-        .title-section .sub-title { font-size: 0.9em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
-        
-        .glass {
-            background: rgba(22,27,34,0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(43,52,66,0.4);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-            border-radius: 16px;
-            transition: 0.3s;
-            padding: 30px;
-            margin-bottom: 20px;
-        }
-        .glass:hover { border-color: rgba(0,229,255,0.12); }
-        
-        .input-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-items: center;
-        }
-        .input-group input, .input-group select {
-            padding: 12px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.3);
-            background: rgba(0,0,0,0.25);
-            color: #F8FAFC;
-            font-size: 1em;
-            font-family: 'Inter', sans-serif;
-            min-width: 140px;
-            transition: 0.3s;
-            flex: 1;
-        }
-        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
-        .input-group select option { background: #0D1117; }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 16px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 1em;
-            transition: 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 0.3px;
-            min-height: 48px;
-            white-space: nowrap;
-        }
-        .btn:hover { transform: translateY(-2px); }
-        .btn-rocket {
-            background: linear-gradient(135deg, #00E5FF, #00E676);
-            color: #0D1117;
-            border: none;
-        }
-        .btn-rocket:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        
-        .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
-        
-        .result-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85);
-            z-index: 999;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(8px);
-        }
-        .result-modal.active { display: flex; }
-        .result-box {
-            background: #161B22;
-            padding: 35px 40px;
-            border-radius: 18px;
-            max-width: 500px;
-            width: 90%;
-            border: 1px solid rgba(43,52,66,0.4);
-            box-shadow: 0 0 60px rgba(0,229,255,0.03);
-            animation: fadeInUp 0.4s ease;
-        }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .result-box h2 {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.1em;
-            color: #00E5FF;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .result-box .row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.2);
-        }
-        .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
-        .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
-        .result-box .row .value-failed { color: #FF4D6D; }
-        .result-box .close-btn {
-            margin-top: 16px;
-            padding: 10px;
-            background: rgba(255,255,255,0.04);
-            color: #A8B3CF;
-            border: 1px solid rgba(43,52,66,0.3);
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            width: 100%;
-            transition: 0.3s;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9em;
-        }
-        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
-        
-        .footer-link { text-align: center; margin-top: 30px; color: #4a5a7a; font-size: 0.8em; }
-        .footer-link a { color: #00E5FF; text-decoration: none; }
-        .footer-link a:hover { text-decoration: underline; }
-        
-        @media (max-width: 768px) {
-            .main { padding: 20px 15px; }
-            .title-section h1 { font-size: 2em; }
-            .glass { padding: 20px; }
-            .input-group input { min-width: 100px; font-size: 0.9em; }
-            .btn { font-size: 0.85em; padding: 10px 16px; min-height: 40px; }
-            .result-box { padding: 20px; }
-        }
-        @media (max-width: 480px) {
-            .title-section h1 { font-size: 1.5em; }
-            .title-section .sub-title { font-size: 0.6em; letter-spacing: 4px; }
-            .input-group { flex-direction: column; }
-            .input-group input, .input-group select { width: 100%; }
-            .btn { width: 100%; justify-content: center; }
-        }
-    </style>
-</head>
-<body>
-    <div class="main">
-        <div class="title-section">
-            <h1>HEX CHEATS</h1>
-            <div class="sub-title">Like Bot System</div>
-        </div>
-        
-        <div class="glass">
-            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-infinity" style="color:#00E5FF;"></i> Unlimited Likes
-            </h2>
-            <div class="input-group">
-                <input type="number" id="target-uid" placeholder="Enter Target UID" />
-                <select id="server-select">
-                    <option value="IND">India</option>
-                    <option value="BD">Bangladesh</option>
-                    <option value="MENA">MENA</option>
-                    <option value="BR">Brazil</option>
-                    <option value="US">US</option>
-                    <option value="SAC">SAC</option>
-                    <option value="NA">NA</option>
-                    <option value="RU">Russia</option>
-                </select>
-                <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-rocket"></i> Send All</button>
-            </div>
-            <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
-        </div>
-        
-        <div class="glass">
-            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
-            </h2>
-            <div class="input-group">
-                <input type="number" id="verify-uid" placeholder="Enter UID" />
-                <select id="verify-server">
-                    <option value="IND">India</option>
-                    <option value="BD">Bangladesh</option>
-                    <option value="MENA">MENA</option>
-                    <option value="BR">Brazil</option>
-                    <option value="US">US</option>
-                    <option value="SAC">SAC</option>
-                    <option value="NA">NA</option>
-                    <option value="RU">Russia</option>
-                </select>
-                <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
-            </div>
-            <div id="verify-result" style="margin-top:12px;"></div>
-        </div>
-        
-        <div class="footer-link">
-            <a href="/admin">Admin Login</a>
-        </div>
-    </div>
-    
-    <!-- Result Modal -->
-    <div class="result-modal" id="resultModal">
-        <div class="result-box">
-            <h2><i class="fas fa-check-circle"></i> Like Result</h2>
-            <div id="result-content">
-                <div class="row"><span class="label">Player Name</span><span class="value" id="res-name">-</span></div>
-                <div class="row"><span class="label">Likes Sent</span><span class="value" id="res-sent">0</span></div>
-                <div class="row"><span class="label">Likes Before</span><span class="value" id="res-before">0</span></div>
-                <div class="row"><span class="label">Likes After</span><span class="value" id="res-after">0</span></div>
-                <div class="row"><span class="label">Verified Added</span><span class="value" id="res-added">0</span></div>
-                <div class="row"><span class="label">Failed</span><span class="value value-failed" id="res-failed">0</span></div>
-            </div>
-            <button class="close-btn" onclick="closeResult()"><i class="fas fa-times"></i> Close</button>
-        </div>
-    </div>
-
-    <script>
-        function showResult(data) {
-            document.getElementById('res-name').textContent = data.username || 'Unknown';
-            document.getElementById('res-sent').textContent = data.likes_sent || 0;
-            document.getElementById('res-before').textContent = data.likes_before || 0;
-            document.getElementById('res-after').textContent = data.total_likes || 0;
-            document.getElementById('res-added').textContent = data.verified_added || 0;
-            document.getElementById('res-failed').textContent = data.failed || 0;
-            document.getElementById('resultModal').classList.add('active');
-        }
-        
-        function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
-        document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
-        
-        function sendLikes() {
-            const uid = document.getElementById('target-uid').value.trim();
-            const server = document.getElementById('server-select').value;
-            if (!uid) { alert('Enter a target UID'); return; }
-            if (!confirm(`Send ALL likes to ${uid} on ${server}?`)) return;
-            
-            const btn = document.querySelector('.btn-rocket');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-            btn.disabled = true;
-            
-            fetch('/api/public-send-likes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid, server_name: server })
-            })
-            .then(res => res.json())
-            .then(data => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                if (data.success) {
-                    showResult(data);
-                } else {
-                    alert('Error: ' + (data.error || 'Unknown error'));
-                }
-            });
-        }
-        
-        function verifyProfile() {
-            const uid = document.getElementById('verify-uid').value.trim();
-            const server = document.getElementById('verify-server').value;
-            if (!uid) { alert('Enter a UID'); return; }
-            
-            fetch('/api/public-verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid, server_name: server })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) {
-                    document.getElementById('verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
-                    return;
-                }
-                document.getElementById('verify-result').innerHTML = `
-                    <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
-                        <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
-                        <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
-                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
-                            <span>Total Likes</span>
-                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-    </script>
-</body>
-</html>
-'''
-
-# ============================================================
-# ADMIN DASHBOARD (Login Required)
+# ADMIN DASHBOARD
 # ============================================================
 ADMIN_HTML = '''
 <!DOCTYPE html>
@@ -1248,6 +1410,40 @@ ADMIN_HTML = '''
         .log-entry .log-error { color: #FF4D6D; }
         .log-entry .log-info { color: #FFC107; }
         
+        /* User DB Table */
+        .user-db-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.85em;
+        }
+        .user-db-table th {
+            background: rgba(0,229,255,0.03);
+            padding: 10px 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #A8B3CF;
+            border-bottom: 1px solid rgba(43,52,66,0.3);
+            text-transform: uppercase;
+            font-size: 0.7em;
+            letter-spacing: 0.8px;
+        }
+        .user-db-table td {
+            padding: 10px 16px;
+            border-bottom: 1px solid rgba(43,52,66,0.15);
+        }
+        .user-db-table .badge {
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-size: 0.65em;
+            font-weight: 600;
+            display: inline-block;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-active { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.06); }
+        .badge-inactive { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.06); }
+        
         .result-modal {
             display: none;
             position: fixed;
@@ -1319,9 +1515,10 @@ ADMIN_HTML = '''
         
         <div class="nav-grid">
             <button class="nav-btn active-nav" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</button>
-            <button class="nav-btn" onclick="showSection('unlimited')"><i class="fas fa-infinity"></i> Unlimited</button>
+            <button class="nav-btn" onclick="showSection('send')"><i class="fas fa-paper-plane"></i> Send</button>
             <button class="nav-btn" onclick="showSection('auto')"><i class="fas fa-clock"></i> Auto Like</button>
-            <button class="nav-btn" onclick="showSection('verify')"><i class="fas fa-check-double"></i> Verify</button>
+            <button class="nav-btn" onclick="showSection('users')"><i class="fas fa-users"></i> Users</button>
+            <button class="nav-btn" onclick="showSection('codes')"><i class="fas fa-key"></i> Codes</button>
             <button class="nav-btn" onclick="showSection('history')"><i class="fas fa-history"></i> History</button>
             <button class="nav-btn" onclick="showSection('stats')"><i class="fas fa-chart-bar"></i> Stats</button>
             <button class="nav-btn" onclick="showSection('logs')"><i class="fas fa-terminal"></i> Logs</button>
@@ -1337,12 +1534,13 @@ ADMIN_HTML = '''
             </div>
         </div>
         
-        <div id="section-unlimited" class="section">
+        <!-- Send Section -->
+        <div id="section-send" class="section">
             <div class="panel">
-                <h2><i class="fas fa-infinity"></i> Unlimited Likes</h2>
+                <h2><i class="fas fa-paper-plane"></i> Send Likes</h2>
                 <div class="input-group">
-                    <input type="number" id="target-uid-unlimited" placeholder="Enter Target UID" />
-                    <select id="server-unlimited">
+                    <input type="number" id="target-uid-send" placeholder="Enter Target UID" />
+                    <select id="server-send">
                         <option value="IND">India</option>
                         <option value="BD">Bangladesh</option>
                         <option value="MENA">MENA</option>
@@ -1352,32 +1550,15 @@ ADMIN_HTML = '''
                         <option value="NA">NA</option>
                         <option value="RU">Russia</option>
                     </select>
-                    <button class="btn btn-rocket" onclick="sendAdminUnlimited()"><i class="fas fa-rocket"></i> Send All</button>
+                    <button class="btn btn-rocket" onclick="sendAdminLikes()"><i class="fas fa-rocket"></i> Send All</button>
                 </div>
                 <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts.</div>
             </div>
-        </div>
-        
-        <div id="section-auto" class="section">
             <div class="panel">
-                <h2><i class="fas fa-clock"></i> Auto Like</h2>
-                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Daily at custom time. All accounts send ALL likes.</p>
+                <h2><i class="fas fa-check-double"></i> Verify Profile</h2>
                 <div class="input-group">
-                    <input type="number" id="target-uid-auto" placeholder="Enter Target UID" />
-                    <button class="btn btn-success" onclick="addAutoUser()"><i class="fas fa-plus"></i> Add</button>
-                    <button class="btn btn-danger" onclick="deleteAllAuto()"><i class="fas fa-trash"></i> Clear All</button>
-                </div>
-                <div class="user-list" id="auto-user-list"></div>
-                <div class="note"><i class="fas fa-info-circle"></i> UIDs stay in queue forever. Only manual removal deletes them.</div>
-            </div>
-        </div>
-        
-        <div id="section-verify" class="section">
-            <div class="panel">
-                <h2><i class="fas fa-check-double"></i> Verify Likes</h2>
-                <div class="input-group">
-                    <input type="number" id="target-uid-verify" placeholder="Enter UID" />
-                    <select id="server-verify">
+                    <input type="number" id="admin-verify-uid" placeholder="Enter UID" />
+                    <select id="admin-verify-server">
                         <option value="IND">India</option>
                         <option value="BD">Bangladesh</option>
                         <option value="MENA">MENA</option>
@@ -1393,6 +1574,41 @@ ADMIN_HTML = '''
             </div>
         </div>
         
+        <!-- Auto Like -->
+        <div id="section-auto" class="section">
+            <div class="panel">
+                <h2><i class="fas fa-clock"></i> Auto Like</h2>
+                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Daily at custom time. All accounts send ALL likes.</p>
+                <div class="input-group">
+                    <input type="number" id="target-uid-auto" placeholder="Enter Target UID" />
+                    <button class="btn btn-success" onclick="addAutoUser()"><i class="fas fa-plus"></i> Add</button>
+                    <button class="btn btn-danger" onclick="deleteAllAuto()"><i class="fas fa-trash"></i> Clear All</button>
+                </div>
+                <div class="user-list" id="auto-user-list"></div>
+                <div class="note"><i class="fas fa-info-circle"></i> UIDs stay in queue forever. Only manual removal deletes them.</div>
+            </div>
+        </div>
+        
+        <!-- Users Section -->
+        <div id="section-users" class="section">
+            <div class="panel">
+                <h2><i class="fas fa-users"></i> User Database</h2>
+                <div id="user-db-content"></div>
+            </div>
+        </div>
+        
+        <!-- Codes Section -->
+        <div id="section-codes" class="section">
+            <div class="panel">
+                <h2><i class="fas fa-key"></i> Admin Codes</h2>
+                <div class="input-group">
+                    <button class="btn btn-primary" onclick="generateCode()"><i class="fas fa-plus"></i> Generate Code</button>
+                </div>
+                <div id="codes-list" style="margin-top:15px;"></div>
+            </div>
+        </div>
+        
+        <!-- History -->
         <div id="section-history" class="section">
             <div class="panel">
                 <h2><i class="fas fa-history"></i> Like History</h2>
@@ -1400,6 +1616,7 @@ ADMIN_HTML = '''
             </div>
         </div>
         
+        <!-- Stats -->
         <div id="section-stats" class="section">
             <div class="panel">
                 <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
@@ -1407,6 +1624,7 @@ ADMIN_HTML = '''
             </div>
         </div>
         
+        <!-- Logs -->
         <div id="section-logs" class="section">
             <div class="panel">
                 <h2><i class="fas fa-terminal"></i> Activity Logs</h2>
@@ -1416,6 +1634,7 @@ ADMIN_HTML = '''
             </div>
         </div>
         
+        <!-- Settings -->
         <div id="section-settings" class="section">
             <div class="panel">
                 <h2><i class="fas fa-cog"></i> Settings</h2>
@@ -1459,7 +1678,6 @@ ADMIN_HTML = '''
             document.querySelectorAll('select[id^="server-"]').forEach(sel => { sel.value = server; });
             document.getElementById('server-select-main').value = server;
             loadAdminData();
-            checkStatus();
         }
         
         function showSection(id) {
@@ -1471,6 +1689,8 @@ ADMIN_HTML = '''
             if (id === 'stats') loadStats();
             if (id === 'logs') loadLogs();
             if (id === 'settings') loadAutoTime();
+            if (id === 'users') loadUsersDB();
+            if (id === 'codes') loadCodes();
         }
         
         function formatTime(iso) {
@@ -1578,6 +1798,62 @@ ADMIN_HTML = '''
                 });
         }
         
+        function loadUsersDB() {
+            fetch('/api/admin/users')
+                .then(res => res.json())
+                .then(data => {
+                    let html = `
+                        <div style="overflow-x:auto;">
+                            <table class="user-db-table">
+                                <thead><tr>
+                                    <th>Email</th>
+                                    <th>Usage</th>
+                                    <th>Last Active</th>
+                                    <th>Created</th>
+                                    <th>Status</th>
+                                </tr></thead>
+                                <tbody>
+                    `;
+                    if (data.users && Object.keys(data.users).length > 0) {
+                        Object.entries(data.users).forEach(([email, info]) => {
+                            const status = info.last_active ? 'active' : 'inactive';
+                            const statusClass = status === 'active' ? 'badge-active' : 'badge-inactive';
+                            html += `
+                                <tr>
+                                    <td><strong>${email}</strong></td>
+                                    <td>${info.usage || 0}</td>
+                                    <td>${formatTime(info.last_active)}</td>
+                                    <td>${formatTime(info.created_at)}</td>
+                                    <td><span class="badge ${statusClass}">${status}</span></td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        html += `<tr><td colspan="5" style="text-align:center;color:#A8B3CF;">No users registered</td></tr>`;
+                    }
+                    html += `</tbody></table></div>`;
+                    document.getElementById('user-db-content').innerHTML = html;
+                });
+        }
+        
+        function loadCodes() {
+            fetch('/api/admin/codes')
+                .then(res => res.json())
+                .then(data => {
+                    let html = '';
+                    if (data.codes && data.codes.length > 0) {
+                        data.codes.forEach(code => {
+                            html += `<div class="user-item" style="background:rgba(0,229,255,0.05);border-color:rgba(0,229,255,0.1);">
+                                <span style="font-family:monospace;font-weight:700;color:#00E5FF;">${code}</span>
+                            </div>`;
+                        });
+                    } else {
+                        html = '<div class="note">No active codes</div>';
+                    }
+                    document.getElementById('codes-list').innerHTML = html;
+                });
+        }
+        
         function showResult(data) {
             document.getElementById('res-name').textContent = data.username || 'Unknown';
             document.getElementById('res-sent').textContent = data.likes_sent || 0;
@@ -1593,9 +1869,9 @@ ADMIN_HTML = '''
         
         function getServer() { return currentServer; }
         
-        function sendAdminUnlimited() {
-            const uid = document.getElementById('target-uid-unlimited').value.trim();
-            const server = document.getElementById('server-unlimited').value;
+        function sendAdminLikes() {
+            const uid = document.getElementById('target-uid-send').value.trim();
+            const server = document.getElementById('server-send').value;
             if (!uid) { alert('Enter a target UID'); return; }
             if (!confirm(`Send ALL likes to ${uid} on ${server}?`)) return;
             
@@ -1623,8 +1899,8 @@ ADMIN_HTML = '''
         }
         
         function adminVerify() {
-            const uid = document.getElementById('target-uid-verify').value.trim();
-            const server = document.getElementById('server-verify').value;
+            const uid = document.getElementById('admin-verify-uid').value.trim();
+            const server = document.getElementById('admin-verify-server').value;
             if (!uid) { alert('Enter a UID'); return; }
             
             fetch('/verify-likes', {
@@ -1649,6 +1925,19 @@ ADMIN_HTML = '''
                     </div>
                 `;
             });
+        }
+        
+        function generateCode() {
+            fetch('/api/admin/generate-code', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Code generated: ' + data.code);
+                        loadCodes();
+                    } else {
+                        alert('Error generating code');
+                    }
+                });
         }
         
         function addAutoUser() {
@@ -1699,12 +1988,6 @@ ADMIN_HTML = '''
             });
         }
         
-        function checkStatus() {
-            fetch('/api/check-status?server=' + currentServer)
-                .then(res => res.json())
-                .then(data => { console.log('Status check started'); setTimeout(loadAdminData, 3000); });
-        }
-        
         document.addEventListener('DOMContentLoaded', function() {
             const sel = document.getElementById('server-select-main');
             currentServer = sel.value;
@@ -1748,8 +2031,14 @@ def logout():
     add_activity_log("👋 Admin logged out", "info")
     return redirect('/')
 
-@app.route('/api/public-send-likes', methods=['POST'])
-def public_send_likes():
+@app.route('/api/public-data')
+def public_data():
+    server = request.args.get('server', 'IND')
+    accounts = load_accounts(server)
+    return jsonify({'total_accounts': len(accounts)})
+
+@app.route('/api/public-send', methods=['POST'])
+def public_send():
     data = request.get_json()
     uid = data.get('uid', '').strip()
     server_name = data.get('server_name', 'IND').upper()
@@ -1806,6 +2095,25 @@ def public_verify():
             'likes': user_info['likes']
         })
     return jsonify({'error': 'User not found'})
+
+@app.route('/api/admin/generate-code', methods=['POST'])
+def generate_code():
+    if not session.get('logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    code = generate_admin_code()
+    return jsonify({'success': True, 'code': code})
+
+@app.route('/api/admin/codes')
+def get_codes():
+    if not session.get('logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({'codes': admin_codes})
+
+@app.route('/api/admin/users')
+def get_users():
+    if not session.get('logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({'users': user_db})
 
 @app.route('/api/dashboard-data')
 def dashboard_data():
@@ -1878,14 +2186,6 @@ def get_logs():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'logs': activity_logs[-50:]})
-
-@app.route('/api/check-status')
-def check_status_api():
-    if not session.get('logged_in'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    server = request.args.get('server', 'IND')
-    threading.Thread(target=run_status_check, args=(server,)).start()
-    return jsonify({'message': f'Status check started for {server}'})
 
 @app.route('/verify-likes', methods=['POST'])
 def verify_likes():
@@ -2099,6 +2399,7 @@ def health():
 load_liked_data()
 load_account_status()
 load_users()
+load_user_db()
 
 reset_thread = threading.Thread(target=daily_reset_task, daemon=True)
 reset_thread.start()
@@ -2111,13 +2412,18 @@ threading.Thread(target=run_status_check, args=("IND",)).start()
 add_activity_log("🚀 HEX CHEATS System Started", "info")
 add_activity_log(f"📁 Accounts: {len(load_accounts('IND'))} (IND)", "info")
 add_activity_log(f"📌 Auto-queue: {len(auto_like_users)} users", "info")
+add_activity_log(f"👤 Users: {len(user_db)} registered", "info")
+add_activity_log(f"🔑 Active codes: {len(admin_codes)}", "info")
 add_activity_log(f"⏰ Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
 
-print("✅ HEX CHEATS – Public + Admin System Started")
+print("✅ HEX CHEATS – Complete System Started")
 print(f"📁 Accounts: {len(load_accounts('IND'))} (IND)")
 print("🔐 Admin Login: HexMods / ADI444")
+print(f"👤 Users: {len(user_db)} registered")
+print(f"🔑 Active codes: {len(admin_codes)}")
 print(f"⏰ Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
 print("🌐 Public URL: / (no login)")
+print("🔐 Admin URL: /admin")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
