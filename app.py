@@ -184,7 +184,7 @@ def add_to_history(target_uid, likes_sent, before, after, username, server="IND"
     }
     like_history.append(entry)
     save_users()
-    add_activity_log(f"✅ {username} | +{likes_sent} likes | Server: {server}", "success")
+    add_activity_log(f"✅ {username} | +{likes_sent} likes | Verified: {after - before}", "success")
 
 def get_next_reset_time():
     now = datetime.now()
@@ -389,6 +389,7 @@ async def send_likes_all_accounts(target_uid, server_name, url):
         else:
             failed += 1
     
+    user_info = None
     if successful > 0:
         user_info = await get_user_info(target_uid, server_name)
         if user_info:
@@ -441,7 +442,6 @@ def get_player_info(encrypted_uid, server_name, token):
         return None
 
 async def check_all_accounts_status(server="IND"):
-    # Just mark accounts as working without checking individual limits
     accounts = load_accounts(server)
     for acc in accounts:
         try:
@@ -520,7 +520,7 @@ LOGIN_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEX CHEATS - Login</title>
+    <title>HEX CHEATS - Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -545,10 +545,7 @@ LOGIN_HTML = '''
             width: 90%;
             box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
-        .login-container .logo {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        .login-container .logo { text-align: center; margin-bottom: 30px; }
         .login-container .logo h1 {
             font-family: 'Orbitron', monospace;
             font-size: 2em;
@@ -558,24 +555,9 @@ LOGIN_HTML = '''
             -webkit-text-fill-color: transparent;
             letter-spacing: 2px;
         }
-        .login-container .logo p {
-            color: #A8B3CF;
-            font-size: 0.8em;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-        .login-container .input-group {
-            margin-bottom: 16px;
-        }
-        .login-container .input-group label {
-            color: #A8B3CF;
-            font-size: 0.8em;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            display: block;
-            margin-bottom: 6px;
-        }
+        .login-container .logo p { color: #A8B3CF; font-size: 0.8em; letter-spacing: 4px; text-transform: uppercase; margin-top: 4px; }
+        .login-container .input-group { margin-bottom: 16px; }
+        .login-container .input-group label { color: #A8B3CF; font-size: 0.8em; font-weight: 600; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
         .login-container .input-group input {
             width: 100%;
             padding: 12px 16px;
@@ -587,11 +569,7 @@ LOGIN_HTML = '''
             font-family: 'Inter', sans-serif;
             transition: 0.3s;
         }
-        .login-container .input-group input:focus {
-            outline: none;
-            border-color: rgba(0,229,255,0.3);
-            box-shadow: 0 0 20px rgba(0,229,255,0.05);
-        }
+        .login-container .input-group input:focus { outline: none; border-color: rgba(0,229,255,0.3); box-shadow: 0 0 20px rgba(0,229,255,0.05); }
         .login-container .login-btn {
             width: 100%;
             padding: 14px;
@@ -607,24 +585,9 @@ LOGIN_HTML = '''
             letter-spacing: 0.5px;
             margin-top: 8px;
         }
-        .login-container .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 0 30px rgba(0,229,255,0.2);
-        }
-        .login-container .error-msg {
-            color: #FF4D6D;
-            font-size: 0.85em;
-            text-align: center;
-            margin-top: 12px;
-            display: none;
-        }
-        .login-container .footer {
-            text-align: center;
-            margin-top: 20px;
-            color: #4a5a7a;
-            font-size: 0.7em;
-            letter-spacing: 1px;
-        }
+        .login-container .login-btn:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(0,229,255,0.2); }
+        .login-container .error-msg { color: #FF4D6D; font-size: 0.85em; text-align: center; margin-top: 12px; display: none; }
+        .login-container .footer { text-align: center; margin-top: 20px; color: #4a5a7a; font-size: 0.7em; letter-spacing: 1px; }
         .login-container .footer i { color: #00E5FF; }
     </style>
 </head>
@@ -632,7 +595,7 @@ LOGIN_HTML = '''
     <div class="login-container">
         <div class="logo">
             <h1>HEX CHEATS</h1>
-            <p>Like Bot System</p>
+            <p>Admin Panel</p>
         </div>
         <form method="POST" action="/login">
             <div class="input-group">
@@ -645,8 +608,8 @@ LOGIN_HTML = '''
             </div>
             <button type="submit" class="login-btn"><i class="fas fa-sign-in-alt"></i> Login</button>
         </form>
-        <div class="error-msg" id="login-error">Invalid username or password!</div>
-        <div class="footer"><i class="fas fa-shield-alt"></i> Secure Connection</div>
+        <div class="error-msg" id="login-error">Invalid credentials!</div>
+        <div class="footer"><i class="fas fa-shield-alt"></i> Secure Access</div>
     </div>
     <script>
         if (window.location.search.includes('error=1')) {
@@ -658,15 +621,15 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# PREMIUM DASHBOARD – NO WORKING/LIMIT CHECKS
+# PUBLIC PAGE (No Login Required)
 # ============================================================
-WEBSITE_HTML = '''
+PUBLIC_HTML = '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEX CHEATS</title>
+    <title>HEX CHEATS - Like Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -676,11 +639,327 @@ WEBSITE_HTML = '''
             background: #0D1117;
             color: #F8FAFC;
             min-height: 100vh;
-            background-image: 
-                radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
-                radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
+                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+        }
+        .main { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+        .title-section { text-align: center; padding: 20px 0; }
+        .title-section h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.8em;
+            font-weight: 900;
+            background: linear-gradient(135deg, #00E5FF, #00E676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 4px;
+            animation: titleGlow 3s ease-in-out infinite;
+        }
+        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
+        .title-section .sub-title { font-size: 0.9em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
+        
+        .glass {
+            background: rgba(22,27,34,0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(43,52,66,0.4);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            border-radius: 16px;
+            transition: 0.3s;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .glass:hover { border-color: rgba(0,229,255,0.12); }
+        
+        .input-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-group input, .input-group select {
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(43,52,66,0.3);
+            background: rgba(0,0,0,0.25);
+            color: #F8FAFC;
+            font-size: 1em;
+            font-family: 'Inter', sans-serif;
+            min-width: 140px;
+            transition: 0.3s;
+            flex: 1;
+        }
+        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
+        .input-group select option { background: #0D1117; }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 1em;
+            transition: 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.3px;
+            min-height: 48px;
+            white-space: nowrap;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-rocket {
+            background: linear-gradient(135deg, #00E5FF, #00E676);
+            color: #0D1117;
+            border: none;
+        }
+        .btn-rocket:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
+        
+        .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
+        
+        .result-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+        .result-modal.active { display: flex; }
+        .result-box {
+            background: #161B22;
+            padding: 35px 40px;
+            border-radius: 18px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(43,52,66,0.4);
+            box-shadow: 0 0 60px rgba(0,229,255,0.03);
+            animation: fadeInUp 0.4s ease;
+        }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .result-box h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1em;
+            color: #00E5FF;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .result-box .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(43,52,66,0.2);
+        }
+        .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
+        .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
+        .result-box .row .value-failed { color: #FF4D6D; }
+        .result-box .close-btn {
+            margin-top: 16px;
+            padding: 10px;
+            background: rgba(255,255,255,0.04);
+            color: #A8B3CF;
+            border: 1px solid rgba(43,52,66,0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+            transition: 0.3s;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+        }
+        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
+        
+        .footer-link { text-align: center; margin-top: 30px; color: #4a5a7a; font-size: 0.8em; }
+        .footer-link a { color: #00E5FF; text-decoration: none; }
+        .footer-link a:hover { text-decoration: underline; }
+        
+        @media (max-width: 768px) {
+            .main { padding: 20px 15px; }
+            .title-section h1 { font-size: 2em; }
+            .glass { padding: 20px; }
+            .input-group input { min-width: 100px; font-size: 0.9em; }
+            .btn { font-size: 0.85em; padding: 10px 16px; min-height: 40px; }
+            .result-box { padding: 20px; }
+        }
+        @media (max-width: 480px) {
+            .title-section h1 { font-size: 1.5em; }
+            .title-section .sub-title { font-size: 0.6em; letter-spacing: 4px; }
+            .input-group { flex-direction: column; }
+            .input-group input, .input-group select { width: 100%; }
+            .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="title-section">
+            <h1>HEX CHEATS</h1>
+            <div class="sub-title">Like Bot System</div>
+        </div>
+        
+        <div class="glass">
+            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                <i class="fas fa-infinity" style="color:#00E5FF;"></i> Unlimited Likes
+            </h2>
+            <div class="input-group">
+                <input type="number" id="target-uid" placeholder="Enter Target UID" />
+                <select id="server-select">
+                    <option value="IND">India</option>
+                    <option value="BD">Bangladesh</option>
+                    <option value="MENA">MENA</option>
+                    <option value="BR">Brazil</option>
+                    <option value="US">US</option>
+                    <option value="SAC">SAC</option>
+                    <option value="NA">NA</option>
+                    <option value="RU">Russia</option>
+                </select>
+                <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-rocket"></i> Send All</button>
+            </div>
+            <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
+        </div>
+        
+        <div class="glass">
+            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
+            </h2>
+            <div class="input-group">
+                <input type="number" id="verify-uid" placeholder="Enter UID" />
+                <select id="verify-server">
+                    <option value="IND">India</option>
+                    <option value="BD">Bangladesh</option>
+                    <option value="MENA">MENA</option>
+                    <option value="BR">Brazil</option>
+                    <option value="US">US</option>
+                    <option value="SAC">SAC</option>
+                    <option value="NA">NA</option>
+                    <option value="RU">Russia</option>
+                </select>
+                <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
+            </div>
+            <div id="verify-result" style="margin-top:12px;"></div>
+        </div>
+        
+        <div class="footer-link">
+            <a href="/admin">Admin Login</a>
+        </div>
+    </div>
+    
+    <!-- Result Modal -->
+    <div class="result-modal" id="resultModal">
+        <div class="result-box">
+            <h2><i class="fas fa-check-circle"></i> Like Result</h2>
+            <div id="result-content">
+                <div class="row"><span class="label">Player Name</span><span class="value" id="res-name">-</span></div>
+                <div class="row"><span class="label">Likes Sent</span><span class="value" id="res-sent">0</span></div>
+                <div class="row"><span class="label">Likes Before</span><span class="value" id="res-before">0</span></div>
+                <div class="row"><span class="label">Likes After</span><span class="value" id="res-after">0</span></div>
+                <div class="row"><span class="label">Verified Added</span><span class="value" id="res-added">0</span></div>
+                <div class="row"><span class="label">Failed</span><span class="value value-failed" id="res-failed">0</span></div>
+            </div>
+            <button class="close-btn" onclick="closeResult()"><i class="fas fa-times"></i> Close</button>
+        </div>
+    </div>
+
+    <script>
+        function showResult(data) {
+            document.getElementById('res-name').textContent = data.username || 'Unknown';
+            document.getElementById('res-sent').textContent = data.likes_sent || 0;
+            document.getElementById('res-before').textContent = data.likes_before || 0;
+            document.getElementById('res-after').textContent = data.total_likes || 0;
+            document.getElementById('res-added').textContent = data.verified_added || 0;
+            document.getElementById('res-failed').textContent = data.failed || 0;
+            document.getElementById('resultModal').classList.add('active');
         }
         
+        function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
+        document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
+        
+        function sendLikes() {
+            const uid = document.getElementById('target-uid').value.trim();
+            const server = document.getElementById('server-select').value;
+            if (!uid) { alert('Enter a target UID'); return; }
+            if (!confirm(`Send ALL likes to ${uid} on ${server}?`)) return;
+            
+            const btn = document.querySelector('.btn-rocket');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            btn.disabled = true;
+            
+            fetch('/api/public-send-likes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, server_name: server })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                if (data.success) {
+                    showResult(data);
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            });
+        }
+        
+        function verifyProfile() {
+            const uid = document.getElementById('verify-uid').value.trim();
+            const server = document.getElementById('verify-server').value;
+            if (!uid) { alert('Enter a UID'); return; }
+            
+            fetch('/api/public-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, server_name: server })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    return;
+                }
+                document.getElementById('verify-result').innerHTML = `
+                    <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
+                        <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
+                        <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
+                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
+                            <span>Total Likes</span>
+                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
+'''
+
+# ============================================================
+# ADMIN DASHBOARD (Login Required)
+# ============================================================
+ADMIN_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEX CHEATS - Admin</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0D1117;
+            color: #F8FAFC;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
+                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
         ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.2); border-radius: 10px; }
@@ -692,19 +971,9 @@ WEBSITE_HTML = '''
         @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
         
         .fade-in { animation: fadeInUp 0.4s ease forwards; }
+        .main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; width: 100%; }
         
-        .main {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 24px 28px;
-            width: 100%;
-        }
-        
-        .title-section {
-            text-align: center;
-            padding: 12px 0 8px 0;
-            margin-bottom: 8px;
-        }
+        .title-section { text-align: center; padding: 12px 0 8px 0; margin-bottom: 8px; }
         .title-section h1 {
             font-family: 'Orbitron', monospace;
             font-size: 2.6em;
@@ -715,15 +984,7 @@ WEBSITE_HTML = '''
             letter-spacing: 4px;
             animation: titleGlow 3s ease-in-out infinite;
         }
-        .title-section .sub-title {
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85em;
-            color: #A8B3CF;
-            letter-spacing: 8px;
-            text-transform: uppercase;
-            margin-top: 2px;
-            font-weight: 400;
-        }
+        .title-section .sub-title { font-size: 0.85em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
         
         .server-selector-row {
             display: flex;
@@ -733,12 +994,7 @@ WEBSITE_HTML = '''
             margin: 10px 0 15px 0;
             flex-wrap: wrap;
         }
-        .server-selector-row label {
-            color: #A8B3CF;
-            font-size: 0.85em;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
+        .server-selector-row label { color: #A8B3CF; font-size: 0.85em; font-weight: 600; letter-spacing: 0.5px; }
         .server-selector-row select {
             padding: 10px 20px;
             border-radius: 12px;
@@ -751,10 +1007,7 @@ WEBSITE_HTML = '''
             transition: 0.3s;
             cursor: pointer;
         }
-        .server-selector-row select:focus {
-            outline: none;
-            border-color: rgba(0,229,255,0.2);
-        }
+        .server-selector-row select:focus { outline: none; border-color: rgba(0,229,255,0.2); }
         .server-selector-row .server-status {
             background: rgba(22,27,34,0.6);
             padding: 8px 20px;
@@ -769,13 +1022,7 @@ WEBSITE_HTML = '''
         .server-selector-row .server-status i { color: #00E5FF; }
         .server-selector-row .server-status .accounts-count { color: #00E676; font-weight: 700; font-size: 1.1em; }
         
-        .header-top {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
+        .header-top { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 8px; }
         .logout-btn {
             padding: 8px 20px;
             border: 1px solid rgba(43,52,66,0.3);
@@ -847,13 +1094,7 @@ WEBSITE_HTML = '''
             min-height: 44px;
             text-align: center;
         }
-        .nav-btn:hover { 
-            background: rgba(0,229,255,0.06); 
-            color: #00E5FF; 
-            transform: translateY(-2px);
-            border-color: rgba(0,229,255,0.15);
-            box-shadow: 0 0 20px rgba(0,229,255,0.05);
-        }
+        .nav-btn:hover { background: rgba(0,229,255,0.06); color: #00E5FF; transform: translateY(-2px); border-color: rgba(0,229,255,0.15); box-shadow: 0 0 20px rgba(0,229,255,0.05); }
         .nav-btn.active-nav {
             background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,230,118,0.10));
             color: #00E5FF;
@@ -883,24 +1124,9 @@ WEBSITE_HTML = '''
             justify-content: center;
             align-items: center;
         }
-        .stat-card:hover { 
-            border-color: rgba(0,229,255,0.08); 
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-        }
-        .stat-card .num {
-            font-family: 'Orbitron', monospace;
-            font-size: 2.2em;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-        .stat-card .lbl {
-            color: #A8B3CF;
-            font-size: 0.7em;
-            margin-top: 5px;
-            letter-spacing: 1.2px;
-            text-transform: uppercase;
-        }
+        .stat-card:hover { border-color: rgba(0,229,255,0.08); transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+        .stat-card .num { font-family: 'Orbitron', monospace; font-size: 2.2em; font-weight: 700; line-height: 1.2; }
+        .stat-card .lbl { color: #A8B3CF; font-size: 0.7em; margin-top: 5px; letter-spacing: 1.2px; text-transform: uppercase; }
         .stat-card .icon { font-size: 1.1em; margin-bottom: 4px; opacity: 0.4; }
         .num-accounts { color: #4D7CFE; }
         .num-likes { color: #A855F7; }
@@ -915,14 +1141,7 @@ WEBSITE_HTML = '''
             border: 1px solid rgba(43,52,66,0.3);
             border-radius: 16px;
         }
-        .panel h2 {
-            color: #A8B3CF;
-            font-size: 0.9em;
-            margin-bottom: 14px;
-            letter-spacing: 1.2px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
+        .panel h2 { color: #A8B3CF; font-size: 0.9em; margin-bottom: 14px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
         .panel h2 i { margin-right: 10px; color: #00E5FF; }
         
         .input-group {
@@ -942,11 +1161,7 @@ WEBSITE_HTML = '''
             min-width: 140px;
             transition: 0.3s;
         }
-        .input-group input:focus, .input-group select:focus {
-            outline: none;
-            border-color: rgba(0,229,255,0.2);
-            box-shadow: 0 0 20px rgba(0,229,255,0.04);
-        }
+        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
         .input-group select option { background: #0D1117; }
         
         .btn {
@@ -965,29 +1180,13 @@ WEBSITE_HTML = '''
             min-height: 42px;
         }
         .btn:hover { transform: translateY(-2px); }
-        .btn-primary {
-            background: linear-gradient(135deg, #00E5FF, #00E676);
-            color: #0D1117;
-            border: none;
-        }
+        .btn-primary { background: linear-gradient(135deg, #00E5FF, #00E676); color: #0D1117; border: none; }
         .btn-primary:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        .btn-success {
-            background: rgba(0,230,118,0.12);
-            color: #00E676;
-            border: 1px solid rgba(0,230,118,0.1);
-        }
+        .btn-success { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.1); }
         .btn-success:hover { background: rgba(0,230,118,0.2); }
-        .btn-danger {
-            background: rgba(255,77,109,0.12);
-            color: #FF4D6D;
-            border: 1px solid rgba(255,77,109,0.1);
-        }
+        .btn-danger { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.1); }
         .btn-danger:hover { background: rgba(255,77,109,0.2); }
-        .btn-rocket {
-            background: linear-gradient(135deg, #FF4D6D, #FF6B8A);
-            color: #0D1117;
-            border: none;
-        }
+        .btn-rocket { background: linear-gradient(135deg, #FF4D6D, #FF6B8A); color: #0D1117; border: none; }
         .btn-rocket:hover { box-shadow: 0 0 30px rgba(255,77,109,0.2); transform: scale(1.02); }
         
         .user-list {
@@ -1012,33 +1211,10 @@ WEBSITE_HTML = '''
         .user-item .uid { font-weight: 600; color: #00E5FF; }
         .user-item .stats { color: #A8B3CF; font-size: 0.75em; }
         .user-item .stats span { color: #00E676; font-weight: 600; }
-        .user-item .del-btn {
-            background: none;
-            border: none;
-            color: #FF4D6D;
-            cursor: pointer;
-            padding: 0 4px;
-            font-size: 1em;
-        }
+        .user-item .del-btn { background: none; border: none; color: #FF4D6D; cursor: pointer; padding: 0 4px; font-size: 1em; }
         
-        .section-title {
-            font-size: 1em;
-            color: #F8FAFC;
-            margin: 20px 0 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-        }
-        .live-dot {
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            background: #00E676;
-            border-radius: 50%;
-            animation: glowPulse 1.5s infinite;
-        }
+        .section-title { font-size: 1em; color: #F8FAFC; margin: 20px 0 10px; display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.3px; }
+        .live-dot { display: inline-block; width: 7px; height: 7px; background: #00E676; border-radius: 50%; animation: glowPulse 1.5s infinite; }
         .note { color: #A8B3CF; font-size: 0.8em; margin-top: 8px; }
         
         .history-item {
@@ -1066,13 +1242,7 @@ WEBSITE_HTML = '''
             padding: 12px 16px;
             border: 1px solid rgba(43,52,66,0.15);
         }
-        .log-entry {
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.08);
-            color: #A8B3CF;
-            display: flex;
-            gap: 12px;
-        }
+        .log-entry { padding: 4px 0; border-bottom: 1px solid rgba(43,52,66,0.08); color: #A8B3CF; display: flex; gap: 12px; }
         .log-entry .log-time { color: #00E5FF; min-width: 60px; }
         .log-entry .log-success { color: #00E676; }
         .log-entry .log-error { color: #FF4D6D; }
@@ -1099,88 +1269,29 @@ WEBSITE_HTML = '''
             box-shadow: 0 0 60px rgba(0,229,255,0.03);
             animation: fadeInUp 0.4s ease;
         }
-        .result-box h2 {
-            font-family: 'Orbitron', monospace;
-            font-size: 1.1em;
-            color: #00E5FF;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .result-box .row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.2);
-        }
+        .result-box h2 { font-family: 'Orbitron', monospace; font-size: 1.1em; color: #00E5FF; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .result-box .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(43,52,66,0.2); }
         .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
         .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
         .result-box .row .value-failed { color: #FF4D6D; }
-        .result-box .close-btn {
-            margin-top: 16px;
-            padding: 10px;
-            background: rgba(255,255,255,0.04);
-            color: #A8B3CF;
-            border: 1px solid rgba(43,52,66,0.3);
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            width: 100%;
-            transition: 0.3s;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9em;
-        }
+        .result-box .close-btn { margin-top: 16px; padding: 10px; background: rgba(255,255,255,0.04); color: #A8B3CF; border: 1px solid rgba(43,52,66,0.3); border-radius: 12px; cursor: pointer; font-weight: 600; width: 100%; transition: 0.3s; font-family: 'Inter', sans-serif; font-size: 0.9em; }
         .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
         
         .section { display: none; }
         .section.active { display: block; animation: fadeInUp 0.35s ease; }
         
-        @media (max-width: 992px) {
-            .main { padding: 18px 20px; }
-            .stats-grid { grid-template-columns: repeat(3, 1fr); }
-            .nav-grid { grid-template-columns: repeat(4, 1fr); }
-            .title-section h1 { font-size: 2em; }
-            .server-selector-row { flex-direction: column; gap: 10px; }
-        }
-        @media (max-width: 768px) {
-            .main { padding: 14px 16px; }
-            .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-            .stat-card { padding: 14px 10px; min-height: 80px; }
-            .stat-card .num { font-size: 1.6em; }
-            .nav-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-            .nav-btn { font-size: 0.7em; padding: 10px 12px; min-height: 38px; }
-            .title-section h1 { font-size: 1.6em; }
-            .title-section .sub-title { font-size: 0.7em; letter-spacing: 4px; }
-            .panel { padding: 16px 18px; }
-            .input-group input, .input-group select { min-width: 100px; font-size: 0.8em; padding: 8px 12px; }
-            .btn { font-size: 0.8em; padding: 8px 16px; min-height: 36px; }
-            .result-box { padding: 20px; }
-            .status-row .item { font-size: 0.7em; padding: 4px 12px; }
-            .server-selector-row .server-status { font-size: 0.7em; padding: 4px 12px; }
-        }
-        @media (max-width: 480px) {
-            .main { padding: 10px 12px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
-            .nav-grid { grid-template-columns: repeat(2, 1fr); }
-            .nav-btn { font-size: 0.65em; padding: 8px 10px; min-height: 34px; }
-            .title-section h1 { font-size: 1.3em; }
-            .title-section .sub-title { font-size: 0.6em; letter-spacing: 3px; }
-            .stat-card .num { font-size: 1.3em; }
-            .stat-card { padding: 12px 8px; min-height: 70px; }
-            .status-row .item { font-size: 0.65em; padding: 3px 10px; }
-        }
+        @media (max-width: 992px) { .main { padding: 18px 20px; } .stats-grid { grid-template-columns: repeat(3, 1fr); } .nav-grid { grid-template-columns: repeat(4, 1fr); } .title-section h1 { font-size: 2em; } .server-selector-row { flex-direction: column; gap: 10px; } }
+        @media (max-width: 768px) { .main { padding: 14px 16px; } .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } .stat-card { padding: 14px 10px; min-height: 80px; } .stat-card .num { font-size: 1.6em; } .nav-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; } .nav-btn { font-size: 0.7em; padding: 10px 12px; min-height: 38px; } .title-section h1 { font-size: 1.6em; } .title-section .sub-title { font-size: 0.7em; letter-spacing: 4px; } .panel { padding: 16px 18px; } .input-group input, .input-group select { min-width: 100px; font-size: 0.8em; padding: 8px 12px; } .btn { font-size: 0.8em; padding: 8px 16px; min-height: 36px; } .result-box { padding: 20px; } .status-row .item { font-size: 0.7em; padding: 4px 12px; } .server-selector-row .server-status { font-size: 0.7em; padding: 4px 12px; } }
+        @media (max-width: 480px) { .main { padding: 10px 12px; } .stats-grid { grid-template-columns: 1fr 1fr; } .nav-grid { grid-template-columns: repeat(2, 1fr); } .nav-btn { font-size: 0.65em; padding: 8px 10px; min-height: 34px; } .title-section h1 { font-size: 1.3em; } .title-section .sub-title { font-size: 0.6em; letter-spacing: 3px; } .stat-card .num { font-size: 1.3em; } .stat-card { padding: 12px 8px; min-height: 70px; } .status-row .item { font-size: 0.65em; padding: 3px 10px; } }
     </style>
 </head>
 <body>
     <div class="main">
-        <!-- Title -->
         <div class="title-section">
             <h1>HEX CHEATS</h1>
-            <div class="sub-title">Like Bot System</div>
+            <div class="sub-title">Admin Panel</div>
         </div>
         
-        <!-- Server Selector -->
         <div class="server-selector-row">
             <label for="server-select-main"><i class="fas fa-globe"></i> Select Server:</label>
             <select id="server-select-main" onchange="changeServer(this.value)">
@@ -1200,14 +1311,12 @@ WEBSITE_HTML = '''
             <a href="/logout"><button class="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</button></a>
         </div>
         
-        <!-- Status Row -->
         <div class="status-row">
             <div class="item"><i class="fas fa-history"></i> Last Auto-Run: <span id="lastAutoRun">Never</span></div>
             <div class="item"><i class="fas fa-info-circle"></i> Status: <span id="autoRunStatus">Idle</span></div>
             <div class="item"><i class="fas fa-comment"></i> Message: <span id="autoRunMessage">-</span></div>
         </div>
         
-        <!-- Navigation -->
         <div class="nav-grid">
             <button class="nav-btn active-nav" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</button>
             <button class="nav-btn" onclick="showSection('unlimited')"><i class="fas fa-infinity"></i> Unlimited</button>
@@ -1219,7 +1328,6 @@ WEBSITE_HTML = '''
             <button class="nav-btn" onclick="showSection('settings')"><i class="fas fa-cog"></i> Settings</button>
         </div>
         
-        <!-- Dashboard -->
         <div id="section-dashboard" class="section active">
             <div class="stats-grid">
                 <div class="stat-card"><div class="icon" style="color:#4D7CFE;"><i class="fas fa-users"></i></div><div class="num num-accounts" id="total-accounts">0</div><div class="lbl">Accounts</div></div>
@@ -1229,7 +1337,6 @@ WEBSITE_HTML = '''
             </div>
         </div>
         
-        <!-- Unlimited Likes -->
         <div id="section-unlimited" class="section">
             <div class="panel">
                 <h2><i class="fas fa-infinity"></i> Unlimited Likes</h2>
@@ -1245,13 +1352,12 @@ WEBSITE_HTML = '''
                         <option value="NA">NA</option>
                         <option value="RU">Russia</option>
                     </select>
-                    <button class="btn btn-rocket" onclick="sendUnlimited()"><i class="fas fa-rocket"></i> Send All</button>
+                    <button class="btn btn-rocket" onclick="sendAdminUnlimited()"><i class="fas fa-rocket"></i> Send All</button>
                 </div>
                 <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts.</div>
             </div>
         </div>
         
-        <!-- Auto Like -->
         <div id="section-auto" class="section">
             <div class="panel">
                 <h2><i class="fas fa-clock"></i> Auto Like</h2>
@@ -1266,7 +1372,6 @@ WEBSITE_HTML = '''
             </div>
         </div>
         
-        <!-- Verify -->
         <div id="section-verify" class="section">
             <div class="panel">
                 <h2><i class="fas fa-check-double"></i> Verify Likes</h2>
@@ -1282,13 +1387,12 @@ WEBSITE_HTML = '''
                         <option value="NA">NA</option>
                         <option value="RU">Russia</option>
                     </select>
-                    <button class="btn btn-primary" onclick="verifyLikes()"><i class="fas fa-check-double"></i> Verify</button>
+                    <button class="btn btn-primary" onclick="adminVerify()"><i class="fas fa-check-double"></i> Verify</button>
                 </div>
-                <div id="verify-result" style="margin-top:12px;"></div>
+                <div id="admin-verify-result" style="margin-top:12px;"></div>
             </div>
         </div>
         
-        <!-- History -->
         <div id="section-history" class="section">
             <div class="panel">
                 <h2><i class="fas fa-history"></i> Like History</h2>
@@ -1296,7 +1400,6 @@ WEBSITE_HTML = '''
             </div>
         </div>
         
-        <!-- Stats -->
         <div id="section-stats" class="section">
             <div class="panel">
                 <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
@@ -1304,7 +1407,6 @@ WEBSITE_HTML = '''
             </div>
         </div>
         
-        <!-- Logs -->
         <div id="section-logs" class="section">
             <div class="panel">
                 <h2><i class="fas fa-terminal"></i> Activity Logs</h2>
@@ -1314,7 +1416,6 @@ WEBSITE_HTML = '''
             </div>
         </div>
         
-        <!-- Settings -->
         <div id="section-settings" class="section">
             <div class="panel">
                 <h2><i class="fas fa-cog"></i> Settings</h2>
@@ -1355,11 +1456,9 @@ WEBSITE_HTML = '''
         
         function changeServer(server) {
             currentServer = server;
-            document.querySelectorAll('select[id^="server-"]').forEach(sel => {
-                sel.value = server;
-            });
+            document.querySelectorAll('select[id^="server-"]').forEach(sel => { sel.value = server; });
             document.getElementById('server-select-main').value = server;
-            loadData();
+            loadAdminData();
             checkStatus();
         }
         
@@ -1389,7 +1488,7 @@ WEBSITE_HTML = '''
                 });
         }
         
-        function loadData() {
+        function loadAdminData() {
             fetch('/api/dashboard-data?server=' + currentServer)
                 .then(res => res.json())
                 .then(data => {
@@ -1494,7 +1593,7 @@ WEBSITE_HTML = '''
         
         function getServer() { return currentServer; }
         
-        function sendUnlimited() {
+        function sendAdminUnlimited() {
             const uid = document.getElementById('target-uid-unlimited').value.trim();
             const server = document.getElementById('server-unlimited').value;
             if (!uid) { alert('Enter a target UID'); return; }
@@ -1516,14 +1615,14 @@ WEBSITE_HTML = '''
                 btn.disabled = false;
                 if (data.success) {
                     showResult(data);
-                    loadData();
+                    loadAdminData();
                 } else {
                     alert('Error: ' + (data.error || 'Unknown error'));
                 }
             });
         }
         
-        function verifyLikes() {
+        function adminVerify() {
             const uid = document.getElementById('target-uid-verify').value.trim();
             const server = document.getElementById('server-verify').value;
             if (!uid) { alert('Enter a UID'); return; }
@@ -1535,11 +1634,18 @@ WEBSITE_HTML = '''
             })
             .then(res => res.json())
             .then(data => {
-                document.getElementById('verify-result').innerHTML = `
+                if (data.error) {
+                    document.getElementById('admin-verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    return;
+                }
+                document.getElementById('admin-verify-result').innerHTML = `
                     <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
                         <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
                         <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
-                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;"><span>Total Likes</span><span style="color:#00E676;font-weight:600;">${data.likes}</span></div>
+                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
+                            <span>Total Likes</span>
+                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
+                        </div>
                     </div>
                 `;
             });
@@ -1555,7 +1661,7 @@ WEBSITE_HTML = '''
             })
             .then(res => res.json())
             .then(data => {
-                if (data.success) { alert('Added to queue: ' + uid); loadData(); } else { alert(data.message); }
+                if (data.success) { alert('Added to queue: ' + uid); loadAdminData(); } else { alert(data.message); }
             });
         }
         
@@ -1563,14 +1669,14 @@ WEBSITE_HTML = '''
             if (!confirm(`Remove ${uid} from auto-queue?`)) return;
             fetch('/delete-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) })
                 .then(res => res.json())
-                .then(data => { if (data.success) loadData(); else alert(data.message); });
+                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
         }
         
         function deleteAllAuto() {
             if (!confirm('Clear entire auto-queue?')) return;
             fetch('/delete-all-users', { method: 'POST' })
                 .then(res => res.json())
-                .then(data => { if (data.success) loadData(); else alert(data.message); });
+                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
         }
         
         function setAutoTime() {
@@ -1589,25 +1695,22 @@ WEBSITE_HTML = '''
             .then(data => {
                 document.getElementById('time-status').textContent = data.message;
                 document.getElementById('current-auto-time').textContent = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')} IST`;
-                loadData();
+                loadAdminData();
             });
         }
         
         function checkStatus() {
             fetch('/api/check-status?server=' + currentServer)
                 .then(res => res.json())
-                .then(data => {
-                    console.log('Status check started');
-                    setTimeout(loadData, 3000);
-                });
+                .then(data => { console.log('Status check started'); setTimeout(loadAdminData, 3000); });
         }
         
         document.addEventListener('DOMContentLoaded', function() {
             const sel = document.getElementById('server-select-main');
             currentServer = sel.value;
-            loadData();
+            loadAdminData();
             loadAutoTime();
-            setInterval(loadData, 5000);
+            setInterval(loadAdminData, 5000);
             setInterval(loadLogs, 5000);
             setInterval(loadHistory, 10000);
         });
@@ -1621,8 +1724,12 @@ WEBSITE_HTML = '''
 # ============================================================
 @app.route('/')
 def index():
+    return render_template_string(PUBLIC_HTML)
+
+@app.route('/admin')
+def admin():
     if session.get('logged_in'):
-        return render_template_string(WEBSITE_HTML)
+        return render_template_string(ADMIN_HTML)
     return render_template_string(LOGIN_HTML)
 
 @app.route('/login', methods=['POST'])
@@ -1631,15 +1738,74 @@ def login():
     password = request.form.get('password')
     if username == 'HexMods' and password == 'ADI444':
         session['logged_in'] = True
-        add_activity_log("✅ User HexMods logged in", "success")
-        return redirect('/')
-    return redirect('/?error=1')
+        add_activity_log("✅ Admin logged in", "success")
+        return redirect('/admin')
+    return redirect('/admin?error=1')
 
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
-    add_activity_log("👋 User logged out", "info")
+    add_activity_log("👋 Admin logged out", "info")
     return redirect('/')
+
+@app.route('/api/public-send-likes', methods=['POST'])
+def public_send_likes():
+    data = request.get_json()
+    uid = data.get('uid', '').strip()
+    server_name = data.get('server_name', 'IND').upper()
+    
+    if not uid:
+        return jsonify({'success': False, 'error': 'UID required'})
+    
+    user_info_before = asyncio.run(get_user_info(uid, server_name))
+    before_likes = user_info_before.get('likes', 0) if user_info_before else 0
+    before_name = user_info_before.get('name', 'Unknown') if user_info_before else 'Unknown'
+    
+    base_url = REGION_URLS.get(server_name, 'https://clientbp.ggpolarbear.com')
+    like_url = f"{base_url}/LikeProfile"
+    
+    result = asyncio.run(send_likes_all_accounts(uid, server_name, like_url))
+    likes_sent = result['success']
+    
+    user_info_after = asyncio.run(get_user_info(uid, server_name))
+    if user_info_after:
+        username = user_info_after.get('name', 'Unknown')
+        current_likes = user_info_after.get('likes', 0)
+        update_user_stats(uid, likes_sent, username, current_likes)
+        add_to_history(uid, likes_sent, before_likes, current_likes, username, server_name)
+        after_likes = current_likes
+    else:
+        after_likes = before_likes
+        username = before_name
+    
+    return jsonify({
+        'success': likes_sent > 0,
+        'likes_sent': likes_sent,
+        'username': username,
+        'total_likes': after_likes,
+        'likes_before': before_likes,
+        'verified_added': after_likes - before_likes,
+        'failed': result.get('failed', 0),
+        'server': server_name
+    })
+
+@app.route('/api/public-verify', methods=['POST'])
+def public_verify():
+    data = request.get_json()
+    uid = data.get('uid', '').strip()
+    server_name = data.get('server_name', 'IND').upper()
+    
+    if not uid:
+        return jsonify({'error': 'UID required'})
+    
+    user_info = asyncio.run(get_user_info(uid, server_name))
+    if user_info:
+        return jsonify({
+            'uid': user_info['uid'],
+            'username': user_info['name'],
+            'likes': user_info['likes']
+        })
+    return jsonify({'error': 'User not found'})
 
 @app.route('/api/dashboard-data')
 def dashboard_data():
@@ -1947,10 +2113,11 @@ add_activity_log(f"📁 Accounts: {len(load_accounts('IND'))} (IND)", "info")
 add_activity_log(f"📌 Auto-queue: {len(auto_like_users)} users", "info")
 add_activity_log(f"⏰ Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
 
-print("✅ HEX CHEATS – Premium Dashboard Started")
+print("✅ HEX CHEATS – Public + Admin System Started")
 print(f"📁 Accounts: {len(load_accounts('IND'))} (IND)")
-print("🔐 Login: HexMods / ADI444")
+print("🔐 Admin Login: HexMods / ADI444")
 print(f"⏰ Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
+print("🌐 Public URL: / (no login)")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
