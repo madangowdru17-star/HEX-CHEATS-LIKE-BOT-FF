@@ -44,7 +44,6 @@ like_history = []
 
 USER_DB_FILE = "user_db.pkl"
 user_db = {}
-admin_codes = []
 
 AUTO_LIKE_HOUR = 4
 AUTO_LIKE_MINUTE = 0
@@ -73,48 +72,25 @@ def add_activity_log(message, log_type="info"):
     print(f"[{timestamp}] [{log_type.upper()}] {message}")
 
 def load_user_db():
-    global user_db, admin_codes
+    global user_db
     try:
         if os.path.exists(USER_DB_FILE):
             with open(USER_DB_FILE, 'rb') as f:
-                data = pickle.load(f)
-                user_db = data.get('users', {})
-                admin_codes = data.get('codes', [])
-                print(f"Loaded {len(user_db)} users, {len(admin_codes)} codes")
+                user_db = pickle.load(f)
+                print(f"Loaded {len(user_db)} users")
         else:
             user_db = {}
-            admin_codes = []
             save_user_db()
     except Exception as e:
         print(f"Error loading user db: {e}")
         user_db = {}
-        admin_codes = []
 
 def save_user_db():
     try:
-        data = {
-            'users': user_db,
-            'codes': admin_codes
-        }
         with open(USER_DB_FILE, 'wb') as f:
-            pickle.dump(data, f)
+            pickle.dump(user_db, f)
     except Exception as e:
         print(f"Error saving user db: {e}")
-
-def generate_admin_code():
-    code = secrets.token_hex(8).upper()
-    admin_codes.append(code)
-    save_user_db()
-    add_activity_log(f"🔑 Generated admin code: {code}", "info")
-    return code
-
-def verify_admin_code(code):
-    if code in admin_codes:
-        admin_codes.remove(code)
-        save_user_db()
-        add_activity_log(f"✅ Admin code used: {code}", "success")
-        return True
-    return False
 
 def create_user(email, password):
     if email in user_db:
@@ -122,12 +98,10 @@ def create_user(email, password):
     hashed = hashlib.sha256(password.encode()).hexdigest()
     user_db[email] = {
         'password': hashed,
-        'codes': [],
         'usage': 0,
         'last_active': datetime.now().isoformat(),
         'auto_like_targets': [],
-        'created_at': datetime.now().isoformat(),
-        'auto_like_unlocked': False
+        'created_at': datetime.now().isoformat()
     }
     save_user_db()
     add_activity_log(f"👤 New user registered: {email}", "info")
@@ -140,14 +114,6 @@ def verify_user(email, password):
     if user_db[email]['password'] == hashed:
         user_db[email]['last_active'] = datetime.now().isoformat()
         save_user_db()
-        return True
-    return False
-
-def unlock_user_auto_like(email):
-    if email in user_db:
-        user_db[email]['auto_like_unlocked'] = True
-        save_user_db()
-        add_activity_log(f"🔓 Auto-like unlocked for {email}", "info")
         return True
     return False
 
@@ -575,19 +541,17 @@ async def auto_like_daily():
             
             add_activity_log(f"🔄 Starting auto-like at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
             
-            # Process all user targets
             for email, user_data in user_db.items():
-                if user_data.get('auto_like_unlocked', False):
-                    targets = user_data.get('auto_like_targets', [])
-                    for target_uid in targets:
-                        add_activity_log(f"📱 Processing {email} -> {target_uid}", "info")
-                        result = await send_likes_all_accounts(
-                            target_uid,
-                            "IND",
-                            "https://client.ind.freefiremobile.com/LikeProfile"
-                        )
-                        add_activity_log(f"✅ Sent {result['success']} likes to {target_uid} for {email}", "success")
-                        await asyncio.sleep(0.5)
+                targets = user_data.get('auto_like_targets', [])
+                for target_uid in targets:
+                    add_activity_log(f"📱 Processing {email} -> {target_uid}", "info")
+                    result = await send_likes_all_accounts(
+                        target_uid,
+                        "IND",
+                        "https://client.ind.freefiremobile.com/LikeProfile"
+                    )
+                    add_activity_log(f"✅ Sent {result['success']} likes to {target_uid} for {email}", "success")
+                    await asyncio.sleep(0.5)
             
             add_activity_log(f"✅ Auto-like cycle complete.", "success")
             
@@ -606,7 +570,7 @@ def set_auto_time(hour, minute):
     return f"Auto-like time set to {hour:02d}:{minute:02d} IST"
 
 # ============================================================
-# PUBLIC PAGE (No Admin Link)
+# PUBLIC PAGE (With User Login for Auto-Like)
 # ============================================================
 PUBLIC_HTML = '''
 <!DOCTYPE html>
@@ -724,8 +688,14 @@ PUBLIC_HTML = '''
         .btn-telegram:hover { background: rgba(0,136,204,0.25); }
         .btn-youtube { background: rgba(255,0,0,0.15); color: #FF4444; border: 1px solid rgba(255,0,0,0.2); }
         .btn-youtube:hover { background: rgba(255,0,0,0.25); }
-        .btn-unlock { background: rgba(255,200,0,0.15); color: #FFC107; border: 1px solid rgba(255,200,0,0.2); }
-        .btn-unlock:hover { background: rgba(255,200,0,0.25); }
+        .btn-login { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid rgba(0,229,255,0.15); }
+        .btn-login:hover { background: rgba(0,229,255,0.2); }
+        .btn-logout { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.15); }
+        .btn-logout:hover { background: rgba(255,77,109,0.2); }
+        .btn-success { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.12); }
+        .btn-success:hover { background: rgba(0,230,118,0.2); }
+        .btn-danger { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.12); }
+        .btn-danger:hover { background: rgba(255,77,109,0.2); }
         
         .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
         
@@ -737,6 +707,16 @@ PUBLIC_HTML = '''
             flex-wrap: wrap;
         }
         .social-links a { text-decoration: none; }
+        
+        .user-auth {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+        .user-auth .user-email { color: #00E5FF; font-weight: 600; }
         
         .result-modal {
             display: none;
@@ -794,6 +774,35 @@ PUBLIC_HTML = '''
         }
         .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
         
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+        .auth-modal.active { display: flex; }
+        .auth-box {
+            background: #161B22;
+            padding: 35px 40px;
+            border-radius: 18px;
+            max-width: 420px;
+            width: 90%;
+            border: 1px solid rgba(43,52,66,0.4);
+            box-shadow: 0 0 60px rgba(0,229,255,0.03);
+            animation: fadeInUp 0.4s ease;
+        }
+        .auth-box h2 { color: #00E5FF; font-family: 'Orbitron', monospace; font-size: 1.2em; margin-bottom: 20px; text-align: center; }
+        .auth-box .input-group { margin-bottom: 12px; }
+        .auth-box .input-group input { width: 100%; }
+        .auth-box .btn { width: 100%; justify-content: center; margin-top: 5px; }
+        .auth-box .switch-link { text-align: center; margin-top: 15px; color: #A8B3CF; font-size: 0.85em; cursor: pointer; }
+        .auth-box .switch-link span { color: #00E5FF; }
+        .auth-box .switch-link span:hover { text-decoration: underline; }
+        
         .footer-contact {
             text-align: center;
             margin-top: 30px;
@@ -817,6 +826,7 @@ PUBLIC_HTML = '''
             .server-status-bar { gap: 8px; }
             .server-status-bar .status-item { font-size: 0.7em; padding: 4px 12px; }
             .social-links .btn { font-size: 0.8em; padding: 8px 14px; }
+            .user-auth { flex-direction: column; }
         }
         @media (max-width: 480px) {
             .title-section h1 { font-size: 1.5em; }
@@ -824,6 +834,7 @@ PUBLIC_HTML = '''
             .input-group { flex-direction: column; }
             .input-group input, .input-group select { width: 100%; }
             .btn { width: 100%; justify-content: center; }
+            .auth-box { padding: 20px; }
         }
     </style>
 </head>
@@ -832,6 +843,16 @@ PUBLIC_HTML = '''
         <div class="title-section">
             <h1>HEX CHEATS</h1>
             <div class="sub-title">Like Bot System</div>
+        </div>
+        
+        <!-- User Auth Status -->
+        <div class="user-auth">
+            {% if session.get('user_email') %}
+            <span class="user-email"><i class="fas fa-user"></i> {{ session.get('user_email') }}</span>
+            <button class="btn btn-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            {% else %}
+            <button class="btn btn-login" onclick="openLogin()"><i class="fas fa-sign-in-alt"></i> Login / Register</button>
+            {% endif %}
         </div>
         
         <div class="server-status-bar">
@@ -881,19 +902,19 @@ PUBLIC_HTML = '''
             <div id="verify-result" style="margin-top:12px;"></div>
         </div>
         
-        <!-- Auto Like - Locked/Unlocked -->
-        <div class="glass" style="border-color: {% if session.get('auto_like_unlocked') %}rgba(0,229,255,0.3){% else %}rgba(255,200,0,0.2){% endif %};">
+        <!-- Auto Like - Requires Login -->
+        <div class="glass" style="border-color: {% if session.get('user_email') %}rgba(0,229,255,0.3){% else %}rgba(255,200,0,0.2){% endif %};">
             <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-clock" style="color:{% if session.get('auto_like_unlocked') %}#00E5FF{% else %}#FFC107{% endif %};"></i> 
+                <i class="fas fa-clock" style="color:{% if session.get('user_email') %}#00E5FF{% else %}#FFC107{% endif %};"></i> 
                 Auto Like
-                {% if session.get('auto_like_unlocked') %}
-                <span style="color:#00E676; font-size:0.7em;">🔓 Unlocked</span>
+                {% if session.get('user_email') %}
+                <span style="color:#00E676; font-size:0.7em;">✅ Active</span>
                 {% else %}
-                <span style="color:#FFC107; font-size:0.7em;">🔒 Locked</span>
+                <span style="color:#FFC107; font-size:0.7em;">🔒 Login Required</span>
                 {% endif %}
             </h2>
             
-            {% if session.get('auto_like_unlocked') %}
+            {% if session.get('user_email') %}
             <div class="input-group">
                 <input type="number" id="auto-target-uid" placeholder="Enter Target UID for Auto-Like" />
                 <button class="btn btn-success" onclick="addAutoTarget()"><i class="fas fa-plus"></i> Add Target</button>
@@ -903,12 +924,8 @@ PUBLIC_HTML = '''
             {% else %}
             <div style="text-align:center; padding:20px 0;">
                 <i class="fas fa-lock" style="font-size:3em; color:#FFC107; opacity:0.5;"></i>
-                <p style="color:#A8B3CF; margin-top:10px;">Auto-Like feature is locked.</p>
-                <div class="input-group" style="justify-content:center; margin-top:15px;">
-                    <input type="text" id="unlock-code" placeholder="Enter Unlock Code" style="max-width:250px;" />
-                    <button class="btn btn-unlock" onclick="unlockAutoLike()"><i class="fas fa-key"></i> Unlock</button>
-                </div>
-                <div id="unlock-message" style="margin-top:10px;"></div>
+                <p style="color:#A8B3CF; margin-top:10px;">Please login to use Auto-Like feature.</p>
+                <button class="btn btn-login" onclick="openLogin()" style="margin-top:15px;"><i class="fas fa-sign-in-alt"></i> Login Now</button>
             </div>
             {% endif %}
         </div>
@@ -926,10 +943,29 @@ PUBLIC_HTML = '''
             </a>
         </div>
         
-        <!-- Contact Admin (instead of Admin link) -->
         <div class="footer-contact">
             <h3><i class="fas fa-headset"></i> Need Help?</h3>
-            <p>Contact us on <a href="https://t.me/HeX_CiPhEr" target="_blank">Telegram</a> for support or to get an unlock code.</p>
+            <p>Contact us on <a href="https://t.me/HeX_CiPhEr" target="_blank">Telegram</a> for support.</p>
+        </div>
+    </div>
+    
+    <!-- Auth Modal -->
+    <div class="auth-modal" id="authModal">
+        <div class="auth-box">
+            <h2 id="auth-title">Login</h2>
+            <form id="auth-form" onsubmit="handleAuth(event)">
+                <div class="input-group">
+                    <input type="email" id="auth-email" placeholder="Email" required />
+                </div>
+                <div class="input-group">
+                    <input type="password" id="auth-password" placeholder="Password" required />
+                </div>
+                <button type="submit" class="btn btn-rocket" id="auth-submit">Login</button>
+            </form>
+            <div class="switch-link" onclick="switchAuthMode()">
+                Don't have an account? <span id="switch-text">Register</span>
+            </div>
+            <div id="auth-message" style="text-align:center;margin-top:10px;font-size:0.85em;"></div>
         </div>
     </div>
     
@@ -950,8 +986,8 @@ PUBLIC_HTML = '''
 
     <script>
         let currentServer = 'IND';
+        let authMode = 'login'; // login or register
         let isLoggedIn = {{ 'true' if session.get('user_email') else 'false' }};
-        let isAutoUnlocked = {{ 'true' if session.get('auto_like_unlocked') else 'false' }};
         
         function updateServerStatus(server) {
             currentServer = server;
@@ -970,14 +1006,17 @@ PUBLIC_HTML = '''
         }
         
         function loadAutoTargets() {
-            if (!isAutoUnlocked) return;
+            if (!isLoggedIn) return;
             fetch('/api/auto-targets')
                 .then(res => res.json())
                 .then(data => {
                     let html = '';
                     if (data.targets && data.targets.length > 0) {
                         data.targets.forEach(target => {
-                            html += `<div class="user-item"><span class="uid">${target}</span><button class="del-btn" onclick="removeAutoTarget('${target}')"><i class="fas fa-times"></i></button></div>`;
+                            html += `<div class="user-item" style="background:rgba(0,229,255,0.05);padding:6px 16px;border-radius:20px;display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(0,229,255,0.1);margin:4px;">
+                                <span style="font-weight:600;color:#00E5FF;">${target}</span>
+                                <button onclick="removeAutoTarget('${target}')" style="background:none;border:none;color:#FF4D6D;cursor:pointer;"><i class="fas fa-times"></i></button>
+                            </div>`;
                         });
                     } else {
                         html = '<div class="note">No targets added yet</div>';
@@ -998,6 +1037,76 @@ PUBLIC_HTML = '''
         
         function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
         document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
+        
+        function openLogin() {
+            document.getElementById('authModal').classList.add('active');
+            document.getElementById('auth-title').textContent = 'Login';
+            document.getElementById('auth-submit').textContent = 'Login';
+            authMode = 'login';
+            document.getElementById('switch-text').textContent = 'Register';
+            document.getElementById('auth-message').textContent = '';
+        }
+        
+        function closeAuth() { document.getElementById('authModal').classList.remove('active'); }
+        document.getElementById('authModal').addEventListener('click', function(e) { if (e.target === this) closeAuth(); });
+        
+        function switchAuthMode() {
+            if (authMode === 'login') {
+                authMode = 'register';
+                document.getElementById('auth-title').textContent = 'Register';
+                document.getElementById('auth-submit').textContent = 'Register';
+                document.getElementById('switch-text').textContent = 'Login';
+            } else {
+                authMode = 'login';
+                document.getElementById('auth-title').textContent = 'Login';
+                document.getElementById('auth-submit').textContent = 'Login';
+                document.getElementById('switch-text').textContent = 'Register';
+            }
+            document.getElementById('auth-message').textContent = '';
+        }
+        
+        function handleAuth(e) {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value.trim();
+            
+            if (!email || !password) {
+                document.getElementById('auth-message').textContent = 'Please fill all fields';
+                document.getElementById('auth-message').style.color = '#FF4D6D';
+                return;
+            }
+            
+            const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+            
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('auth-message').textContent = data.message;
+                    document.getElementById('auth-message').style.color = '#00E676';
+                    setTimeout(() => {
+                        closeAuth();
+                        location.reload();
+                    }, 1000);
+                } else {
+                    document.getElementById('auth-message').textContent = data.message;
+                    document.getElementById('auth-message').style.color = '#FF4D6D';
+                }
+            });
+        }
+        
+        function logoutUser() {
+            if (!confirm('Logout?')) return;
+            fetch('/api/logout', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) location.reload();
+                });
+        }
         
         function sendLikes() {
             const uid = document.getElementById('target-uid').value.trim();
@@ -1056,26 +1165,6 @@ PUBLIC_HTML = '''
             });
         }
         
-        function unlockAutoLike() {
-            const code = document.getElementById('unlock-code').value.trim();
-            if (!code) { alert('Enter an unlock code'); return; }
-            
-            fetch('/api/unlock-auto', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('unlock-message').innerHTML = `<div style="color:#00E676;">✅ ${data.message}</div>`;
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    document.getElementById('unlock-message').innerHTML = `<div style="color:#FF4D6D;">❌ ${data.message}</div>`;
-                }
-            });
-        }
-        
         function addAutoTarget() {
             const uid = document.getElementById('auto-target-uid').value.trim();
             if (!uid) { alert('Enter a target UID'); return; }
@@ -1112,14 +1201,14 @@ PUBLIC_HTML = '''
         
         loadPublicData();
         setInterval(loadPublicData, 10000);
-        if (isAutoUnlocked) loadAutoTargets();
+        if (isLoggedIn) loadAutoTargets();
     </script>
 </body>
 </html>
 '''
 
 # ============================================================
-# LOGIN PAGE (Admin Only)
+# LOGIN PAGE (Admin)
 # ============================================================
 LOGIN_HTML = '''
 <!DOCTYPE html>
@@ -1228,7 +1317,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# ADMIN DASHBOARD
+# ADMIN DASHBOARD (Full Tabs)
 # ============================================================
 ADMIN_HTML = '''
 <!DOCTYPE html>
@@ -1564,8 +1653,6 @@ ADMIN_HTML = '''
         .badge { padding: 2px 12px; border-radius: 20px; font-size: 0.65em; font-weight: 600; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px; }
         .badge-active { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.06); }
         .badge-inactive { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.06); }
-        .badge-unlocked { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid rgba(0,229,255,0.06); }
-        .badge-locked { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.06); }
         
         .result-modal {
             display: none;
@@ -1639,9 +1726,8 @@ ADMIN_HTML = '''
         <div class="nav-grid">
             <button class="nav-btn active-nav" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</button>
             <button class="nav-btn" onclick="showSection('send')"><i class="fas fa-paper-plane"></i> Send</button>
-            <button class="nav-btn" onclick="showSection('auto')"><i class="fas fa-clock"></i> Auto Like</button>
+            <button class="nav-btn" onclick="showSection('auto')"><i class="fas fa-clock"></i> Auto</button>
             <button class="nav-btn" onclick="showSection('users')"><i class="fas fa-users"></i> Users</button>
-            <button class="nav-btn" onclick="showSection('codes')"><i class="fas fa-key"></i> Codes</button>
             <button class="nav-btn" onclick="showSection('history')"><i class="fas fa-history"></i> History</button>
             <button class="nav-btn" onclick="showSection('stats')"><i class="fas fa-chart-bar"></i> Stats</button>
             <button class="nav-btn" onclick="showSection('logs')"><i class="fas fa-terminal"></i> Logs</button>
@@ -1700,14 +1786,15 @@ ADMIN_HTML = '''
         <div id="section-auto" class="section">
             <div class="panel">
                 <h2><i class="fas fa-clock"></i> Auto Like</h2>
-                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Manage user auto-like targets and unlock status.</p>
-                <div style="margin-bottom:15px; display:flex; flex-wrap:wrap; gap:10px;">
-                    <div class="input-group" style="flex:1;">
-                        <input type="email" id="user-email-unlock" placeholder="User Email" style="min-width:200px;" />
-                        <button class="btn btn-warning" onclick="unlockUserAuto()"><i class="fas fa-unlock"></i> Unlock Auto-Like</button>
+                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Manage user auto-like targets.</p>
+                <div style="margin-bottom:15px;">
+                    <div class="input-group">
+                        <input type="email" id="user-email" placeholder="User Email" style="min-width:200px;" />
+                        <button class="btn btn-primary" onclick="viewUserTargets()"><i class="fas fa-eye"></i> View Targets</button>
                     </div>
                 </div>
-                <div class="note"><i class="fas fa-info-circle"></i> Unlock auto-like for users so they can add targets on public page.</div>
+                <div id="user-targets-display" style="margin-top:10px;"></div>
+                <div class="note"><i class="fas fa-info-circle"></i> Enter user email to view their auto-like targets.</div>
             </div>
         </div>
         
@@ -1715,17 +1802,6 @@ ADMIN_HTML = '''
             <div class="panel">
                 <h2><i class="fas fa-users"></i> User Database</h2>
                 <div id="user-db-content"></div>
-            </div>
-        </div>
-        
-        <div id="section-codes" class="section">
-            <div class="panel">
-                <h2><i class="fas fa-key"></i> Unlock Codes</h2>
-                <div class="input-group">
-                    <button class="btn btn-primary" onclick="generateCode()"><i class="fas fa-plus"></i> Generate Code</button>
-                </div>
-                <div id="codes-list" style="margin-top:15px;"></div>
-                <div class="note"><i class="fas fa-info-circle"></i> Users enter these codes on the public page to unlock auto-like.</div>
             </div>
         </div>
         
@@ -1806,7 +1882,6 @@ ADMIN_HTML = '''
             if (id === 'logs') loadLogs();
             if (id === 'settings') loadAutoTime();
             if (id === 'users') loadUsersDB();
-            if (id === 'codes') loadCodes();
         }
         
         function formatTime(iso) {
@@ -1930,7 +2005,6 @@ ADMIN_HTML = '''
                                     <th>Email</th>
                                     <th>Usage</th>
                                     <th>Targets</th>
-                                    <th>Auto-Like</th>
                                     <th>Last Active</th>
                                     <th>Created</th>
                                 </tr></thead>
@@ -1938,43 +2012,45 @@ ADMIN_HTML = '''
                     `;
                     if (data.users && Object.keys(data.users).length > 0) {
                         Object.entries(data.users).forEach(([email, info]) => {
-                            const autoStatus = info.auto_like_unlocked ? 'Unlocked' : 'Locked';
-                            const autoClass = info.auto_like_unlocked ? 'badge-unlocked' : 'badge-locked';
                             const targetCount = (info.auto_like_targets || []).length;
                             html += `
                                 <tr>
                                     <td><strong>${email}</strong></td>
                                     <td>${info.usage || 0}</td>
                                     <td>${targetCount}</td>
-                                    <td><span class="badge ${autoClass}">${autoStatus}</span></td>
                                     <td>${formatTime(info.last_active)}</td>
                                     <td>${formatTime(info.created_at)}</td>
                                 </tr>
                             `;
                         });
                     } else {
-                        html += `<tr><td colspan="6" style="text-align:center;color:#A8B3CF;">No users registered</td></tr>`;
+                        html += `<tr><td colspan="5" style="text-align:center;color:#A8B3CF;">No users registered</td></tr>`;
                     }
                     html += `</tbody></table></div>`;
                     document.getElementById('user-db-content').innerHTML = html;
                 });
         }
         
-        function loadCodes() {
-            fetch('/api/admin/codes')
+        function viewUserTargets() {
+            const email = document.getElementById('user-email').value.trim();
+            if (!email) { alert('Enter user email'); return; }
+            
+            fetch('/api/admin/user-targets?email=' + encodeURIComponent(email))
                 .then(res => res.json())
                 .then(data => {
                     let html = '';
-                    if (data.codes && data.codes.length > 0) {
-                        data.codes.forEach(code => {
+                    if (data.error) {
+                        html = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    } else if (data.targets && data.targets.length > 0) {
+                        data.targets.forEach(target => {
                             html += `<div class="user-item" style="background:rgba(0,229,255,0.05);border-color:rgba(0,229,255,0.1);">
-                                <span style="font-family:monospace;font-weight:700;color:#00E5FF;">${code}</span>
+                                <span style="font-weight:600;color:#00E5FF;">${target}</span>
                             </div>`;
                         });
                     } else {
-                        html = '<div class="note">No active codes</div>';
+                        html = '<div class="note">No targets found for this user</div>';
                     }
-                    document.getElementById('codes-list').innerHTML = html;
+                    document.getElementById('user-targets-display').innerHTML = html;
                 });
         }
         
@@ -2048,40 +2124,6 @@ ADMIN_HTML = '''
                         </div>
                     </div>
                 `;
-            });
-        }
-        
-        function generateCode() {
-            fetch('/api/admin/generate-code', { method: 'POST' })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Code generated: ' + data.code);
-                        loadCodes();
-                    } else {
-                        alert('Error generating code');
-                    }
-                });
-        }
-        
-        function unlockUserAuto() {
-            const email = document.getElementById('user-email-unlock').value.trim();
-            if (!email) { alert('Enter user email'); return; }
-            
-            fetch('/api/admin/unlock-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert(data.message);
-                    loadUsersDB();
-                    document.getElementById('user-email-unlock').value = '';
-                } else {
-                    alert(data.message);
-                }
             });
         }
         
@@ -2176,6 +2218,43 @@ def admin_logout():
     add_activity_log("👋 Admin logged out", "info")
     return redirect('/')
 
+@app.route('/api/login', methods=['POST'])
+def user_login():
+    data = request.get_json()
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'})
+    
+    if verify_user(email, password):
+        session['user_email'] = email
+        add_activity_log(f"👤 User logged in: {email}", "info")
+        return jsonify({'success': True, 'message': 'Login successful'})
+    
+    return jsonify({'success': False, 'message': 'Invalid credentials'})
+
+@app.route('/api/register', methods=['POST'])
+def user_register():
+    data = request.get_json()
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not email or not password:
+        return jsonify({'success': False, 'message': 'Email and password required'})
+    
+    if create_user(email, password):
+        session['user_email'] = email
+        add_activity_log(f"👤 User registered: {email}", "info")
+        return jsonify({'success': True, 'message': 'Registration successful'})
+    
+    return jsonify({'success': False, 'message': 'Email already registered'})
+
+@app.route('/api/logout', methods=['POST'])
+def user_logout():
+    session.pop('user_email', None)
+    return jsonify({'success': True, 'message': 'Logged out'})
+
 @app.route('/api/public-data')
 def public_data():
     server = request.args.get('server', 'IND')
@@ -2241,23 +2320,6 @@ def public_verify():
         })
     return jsonify({'error': 'User not found'})
 
-@app.route('/api/unlock-auto', methods=['POST'])
-def unlock_auto():
-    data = request.get_json()
-    code = data.get('code', '').strip().upper()
-    
-    if not code:
-        return jsonify({'success': False, 'message': 'Code required'})
-    
-    if code in admin_codes:
-        admin_codes.remove(code)
-        save_user_db()
-        session['auto_like_unlocked'] = True
-        add_activity_log(f"🔓 User unlocked auto-like with code: {code}", "info")
-        return jsonify({'success': True, 'message': 'Auto-like unlocked successfully!'})
-    
-    return jsonify({'success': False, 'message': 'Invalid code. Contact admin.'})
-
 @app.route('/api/auto-targets', methods=['GET'])
 def get_auto_targets():
     email = session.get('user_email')
@@ -2298,39 +2360,20 @@ def remove_auto_target():
     
     return jsonify({'success': False, 'message': 'Failed to remove target'})
 
-@app.route('/api/admin/generate-code', methods=['POST'])
-def generate_code():
-    if not session.get('logged_in'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    code = generate_admin_code()
-    return jsonify({'success': True, 'code': code})
-
-@app.route('/api/admin/codes')
-def get_codes():
-    if not session.get('logged_in'):
-        return jsonify({'error': 'Unauthorized'}), 401
-    return jsonify({'codes': admin_codes})
-
 @app.route('/api/admin/users')
-def get_users():
+def get_admin_users():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'users': user_db})
 
-@app.route('/api/admin/unlock-user', methods=['POST'])
-def unlock_user():
+@app.route('/api/admin/user-targets')
+def get_user_targets():
     if not session.get('logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
-    data = request.get_json()
-    email = data.get('email', '').strip()
-    
-    if not email:
-        return jsonify({'success': False, 'message': 'Email required'})
-    
-    if unlock_user_auto_like(email):
-        return jsonify({'success': True, 'message': f'Auto-like unlocked for {email}'})
-    
-    return jsonify({'success': False, 'message': 'User not found'})
+    email = request.args.get('email', '').strip()
+    if not email or email not in user_db:
+        return jsonify({'error': 'User not found'})
+    return jsonify({'targets': user_db[email].get('auto_like_targets', [])})
 
 @app.route('/api/dashboard-data')
 def dashboard_data():
@@ -2621,16 +2664,14 @@ add_activity_log("🚀 HEX CHEATS System Started", "info")
 add_activity_log(f"📁 Accounts: {len(load_accounts('IND'))} (IND)", "info")
 add_activity_log(f"📌 Auto-queue: {len(auto_like_users)} users", "info")
 add_activity_log(f"👤 Users: {len(user_db)} registered", "info")
-add_activity_log(f"🔑 Active codes: {len(admin_codes)}", "info")
 add_activity_log(f"⏰ Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
 
 print("✅ HEX CHEATS – Complete System Started")
 print(f"📁 Accounts: {len(load_accounts('IND'))} (IND)")
 print("🔐 Admin Login: HexMods / ADI444")
 print(f"👤 Users: {len(user_db)} registered")
-print(f"🔑 Active codes: {len(admin_codes)}")
 print(f"⏰ Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
-print("🌐 Public URL: / (no login)")
+print("🌐 Public URL: / (login for auto-like)")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
