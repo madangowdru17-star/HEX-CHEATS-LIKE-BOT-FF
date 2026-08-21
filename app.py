@@ -358,6 +358,9 @@ def load_accounts(server_name):
         print(f"Error loading accounts: {e}")
         return []
 
+def get_accounts_count(server_name):
+    return len(load_accounts(server_name))
+
 async def get_user_info(target_uid, server_name="IND"):
     try:
         accounts = load_accounts(server_name)
@@ -643,7 +646,7 @@ print(f"Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
 print("Public URL: / (no login)")
 
 # ============================================================
-# REGISTER BLUEPRINTS (After all functions are defined)
+# REGISTER BLUEPRINTS
 # ============================================================
 try:
     from public import public_bp
@@ -655,6 +658,8 @@ try:
     print("Blueprints registered successfully!")
 except Exception as e:
     print(f"Error registering blueprints: {e}")
+    import traceback
+    traceback.print_exc()
 
 # ============================================================
 # ROOT ROUTE - Direct fallback

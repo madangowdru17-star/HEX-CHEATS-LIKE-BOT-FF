@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template_string, session, redirect, url_for
 import asyncio
+import os
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -11,7 +12,8 @@ from app import (
     auto_like_users, user_stats, like_history, account_status,
     liked_cache, activity_logs, AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE,
     add_activity_log, save_user_db, save_users, get_next_reset_time,
-    set_auto_time, reset_all_data
+    set_auto_time, reset_all_data, get_accounts_count, load_user_db,
+    load_users, load_liked_data, load_account_status
 )
 
 # ============================================================
@@ -24,24 +26,24 @@ LOGIN_HTML = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HEX CHEATS - Admin</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: #0D1117;
+            background: #080C14;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-image: radial-gradient(circle at 20% 30%, rgba(0,229,255,0.05) 0%, transparent 50%),
-                              radial-gradient(circle at 80% 70%, rgba(0,230,118,0.05) 0%, transparent 50%);
+            background-image: radial-gradient(circle at 20% 30%, rgba(56,189,248,0.05) 0%, transparent 50%),
+                              radial-gradient(circle at 80% 70%, rgba(52,211,153,0.05) 0%, transparent 50%);
         }
         .login-container {
-            background: rgba(22,27,34,0.9);
+            background: rgba(12, 22, 40, 0.95);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(43,52,66,0.4);
+            border: 1px solid rgba(56,189,248,0.1);
             border-radius: 24px;
             padding: 50px 40px;
             max-width: 420px;
@@ -53,33 +55,33 @@ LOGIN_HTML = '''
             font-family: 'Orbitron', monospace;
             font-size: 2em;
             font-weight: 900;
-            background: linear-gradient(135deg, #00E5FF, #00E676);
+            background: linear-gradient(135deg, #38BDF8, #34D399);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 2px;
         }
-        .login-container .logo p { color: #A8B3CF; font-size: 0.8em; letter-spacing: 4px; text-transform: uppercase; margin-top: 4px; }
+        .login-container .logo p { color: #8899BB; font-size: 0.8em; letter-spacing: 4px; text-transform: uppercase; margin-top: 4px; }
         .login-container .input-group { margin-bottom: 16px; }
-        .login-container .input-group label { color: #A8B3CF; font-size: 0.8em; font-weight: 600; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+        .login-container .input-group label { color: #8899BB; font-size: 0.8em; font-weight: 600; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
         .login-container .input-group input {
             width: 100%;
             padding: 12px 16px;
             border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.4);
+            border: 1px solid rgba(56,189,248,0.1);
             background: rgba(0,0,0,0.3);
-            color: #F8FAFC;
+            color: #F0F4FF;
             font-size: 1em;
             font-family: 'Inter', sans-serif;
             transition: 0.3s;
         }
-        .login-container .input-group input:focus { outline: none; border-color: rgba(0,229,255,0.3); box-shadow: 0 0 20px rgba(0,229,255,0.05); }
+        .login-container .input-group input:focus { outline: none; border-color: rgba(56,189,248,0.3); box-shadow: 0 0 20px rgba(56,189,248,0.05); }
         .login-container .login-btn {
             width: 100%;
             padding: 14px;
             border: none;
             border-radius: 12px;
-            background: linear-gradient(135deg, #00E5FF, #00E676);
-            color: #0D1117;
+            background: linear-gradient(135deg, #38BDF8, #34D399);
+            color: #080C14;
             font-size: 1em;
             font-weight: 700;
             cursor: pointer;
@@ -88,10 +90,10 @@ LOGIN_HTML = '''
             letter-spacing: 0.5px;
             margin-top: 8px;
         }
-        .login-container .login-btn:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        .login-container .error-msg { color: #FF4D6D; font-size: 0.85em; text-align: center; margin-top: 12px; display: none; }
+        .login-container .login-btn:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(56,189,248,0.2); }
+        .login-container .error-msg { color: #F87171; font-size: 0.85em; text-align: center; margin-top: 12px; display: none; }
         .login-container .footer { text-align: center; margin-top: 20px; color: #4a5a7a; font-size: 0.7em; letter-spacing: 1px; }
-        .login-container .footer i { color: #00E5FF; }
+        .login-container .footer i { color: #38BDF8; }
         @media (max-width: 480px) {
             .login-container { padding: 30px 20px; }
             .login-container .logo h1 { font-size: 1.5em; }
@@ -128,7 +130,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# ADMIN DASHBOARD HTML (Abbreviated - Full version from original)
+# ADMIN DASHBOARD HTML (Full Working Version)
 # ============================================================
 ADMIN_HTML = '''
 <!DOCTYPE html>
@@ -137,27 +139,27 @@ ADMIN_HTML = '''
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HEX CHEATS - Admin</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: #0D1117;
-            color: #F8FAFC;
+            background: #080C14;
+            color: #F0F4FF;
             min-height: 100vh;
-            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
-                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+            background-image: radial-gradient(circle at 15% 20%, rgba(56,189,248,0.04) 0%, transparent 50%),
+                              radial-gradient(circle at 85% 80%, rgba(52,211,153,0.04) 0%, transparent 50%);
         }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
-        ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.2); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(0,229,255,0.35); }
+        ::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(56,189,248,0.35); }
         
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes neonPulse { 0%,100% { box-shadow: 0 0 15px rgba(0,229,255,0.05), 0 0 30px rgba(0,229,255,0.02); } 50% { box-shadow: 0 0 25px rgba(0,229,255,0.12), 0 0 50px rgba(0,229,255,0.04); } }
+        @keyframes neonPulse { 0%,100% { box-shadow: 0 0 15px rgba(56,189,248,0.05), 0 0 30px rgba(56,189,248,0.02); } 50% { box-shadow: 0 0 25px rgba(56,189,248,0.12), 0 0 50px rgba(56,189,248,0.04); } }
         @keyframes glowPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
-        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
+        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(56,189,248,0.2), 0 0 40px rgba(56,189,248,0.05); } 50% { text-shadow: 0 0 30px rgba(56,189,248,0.35), 0 0 60px rgba(56,189,248,0.1); } }
         
         .fade-in { animation: fadeInUp 0.4s ease forwards; }
         .main { max-width: 1400px; margin: 0 auto; padding: 24px 28px; width: 100%; }
@@ -167,13 +169,13 @@ ADMIN_HTML = '''
             font-family: 'Orbitron', monospace;
             font-size: 2.6em;
             font-weight: 900;
-            background: linear-gradient(135deg, #00E5FF, #00E676);
+            background: linear-gradient(135deg, #38BDF8, #34D399);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: 4px;
             animation: titleGlow 3s ease-in-out infinite;
         }
-        .title-section .sub-title { font-size: 0.85em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
+        .title-section .sub-title { font-size: 0.85em; color: #8899BB; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
         
         .server-selector-row {
             display: flex;
@@ -183,58 +185,58 @@ ADMIN_HTML = '''
             margin: 10px 0 15px 0;
             flex-wrap: wrap;
         }
-        .server-selector-row label { color: #A8B3CF; font-size: 0.85em; font-weight: 600; letter-spacing: 0.5px; }
+        .server-selector-row label { color: #8899BB; font-size: 0.85em; font-weight: 600; letter-spacing: 0.5px; }
         .server-selector-row select {
             padding: 10px 20px;
             border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.1);
             background: rgba(0,0,0,0.25);
-            color: #F8FAFC;
+            color: #F0F4FF;
             font-size: 0.9em;
             font-family: 'Inter', sans-serif;
             min-width: 150px;
             transition: 0.3s;
             cursor: pointer;
         }
-        .server-selector-row select:focus { outline: none; border-color: rgba(0,229,255,0.2); }
+        .server-selector-row select:focus { outline: none; border-color: rgba(56,189,248,0.2); }
         .server-selector-row .server-status {
-            background: rgba(22,27,34,0.6);
+            background: rgba(12,22,40,0.6);
             padding: 8px 20px;
             border-radius: 20px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.1);
             font-size: 0.8em;
-            color: #A8B3CF;
+            color: #8899BB;
             display: inline-flex;
             align-items: center;
             gap: 10px;
         }
-        .server-selector-row .server-status i { color: #00E5FF; }
-        .server-selector-row .server-status .accounts-count { color: #00E676; font-weight: 700; font-size: 1.1em; }
+        .server-selector-row .server-status i { color: #38BDF8; }
+        .server-selector-row .server-status .accounts-count { color: #34D399; font-weight: 700; font-size: 1.1em; }
         
         .header-top { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 8px; }
         .logout-btn {
             padding: 8px 20px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.1);
             border-radius: 12px;
             background: rgba(255,255,255,0.03);
-            color: #A8B3CF;
+            color: #8899BB;
             cursor: pointer;
             font-size: 0.8em;
             font-weight: 600;
             transition: 0.3s;
             font-family: 'Inter', sans-serif;
         }
-        .logout-btn:hover { background: rgba(255,77,109,0.1); color: #FF4D6D; border-color: rgba(255,77,109,0.2); }
+        .logout-btn:hover { background: rgba(248,113,113,0.1); color: #F87171; border-color: rgba(248,113,113,0.2); }
         
         .glass {
-            background: rgba(22,27,34,0.85);
+            background: rgba(12,22,40,0.85);
             backdrop-filter: blur(12px);
-            border: 1px solid rgba(43,52,66,0.4);
+            border: 1px solid rgba(56,189,248,0.08);
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             border-radius: 16px;
             transition: 0.3s;
         }
-        .glass:hover { border-color: rgba(0,229,255,0.12); }
+        .glass:hover { border-color: rgba(56,189,248,0.12); }
         
         .status-row {
             display: flex;
@@ -245,18 +247,18 @@ ADMIN_HTML = '''
             padding: 4px 0;
         }
         .status-row .item {
-            background: rgba(22,27,34,0.5);
+            background: rgba(12,22,40,0.5);
             padding: 6px 18px;
             border-radius: 20px;
             font-size: 0.82em;
-            border: 1px solid rgba(43,52,66,0.3);
-            color: #A8B3CF;
+            border: 1px solid rgba(56,189,248,0.08);
+            color: #8899BB;
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .status-row .item i { color: #00E5FF; font-size: 0.9em; }
-        .status-row .item span { color: #F8FAFC; font-weight: 500; }
+        .status-row .item i { color: #38BDF8; font-size: 0.9em; }
+        .status-row .item span { color: #F0F4FF; font-weight: 500; }
         
         .nav-grid {
             display: grid;
@@ -266,7 +268,7 @@ ADMIN_HTML = '''
         }
         .nav-btn {
             padding: 12px 14px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.08);
             border-radius: 16px;
             cursor: pointer;
             font-weight: 600;
@@ -278,17 +280,17 @@ ADMIN_HTML = '''
             gap: 8px;
             font-family: 'Inter', sans-serif;
             letter-spacing: 0.3px;
-            background: #232A36;
-            color: #A8B3CF;
+            background: #0C1628;
+            color: #8899BB;
             min-height: 44px;
             text-align: center;
         }
-        .nav-btn:hover { background: rgba(0,229,255,0.06); color: #00E5FF; transform: translateY(-2px); border-color: rgba(0,229,255,0.15); box-shadow: 0 0 20px rgba(0,229,255,0.05); }
+        .nav-btn:hover { background: rgba(56,189,248,0.06); color: #38BDF8; transform: translateY(-2px); border-color: rgba(56,189,248,0.15); box-shadow: 0 0 20px rgba(56,189,248,0.05); }
         .nav-btn.active-nav {
-            background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,230,118,0.10));
-            color: #00E5FF;
-            border-color: rgba(0,229,255,0.2);
-            box-shadow: 0 0 30px rgba(0,229,255,0.06);
+            background: linear-gradient(135deg, rgba(56,189,248,0.15), rgba(52,211,153,0.10));
+            color: #38BDF8;
+            border-color: rgba(56,189,248,0.2);
+            box-shadow: 0 0 30px rgba(56,189,248,0.06);
             animation: neonPulse 2.5s infinite;
         }
         .nav-btn i { font-size: 0.9em; }
@@ -302,9 +304,9 @@ ADMIN_HTML = '''
         .stat-card {
             padding: 18px 14px;
             text-align: center;
-            background: rgba(22,27,34,0.6);
+            background: rgba(12,22,40,0.6);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.08);
             border-radius: 16px;
             transition: 0.3s;
             min-height: 100px;
@@ -313,26 +315,26 @@ ADMIN_HTML = '''
             justify-content: center;
             align-items: center;
         }
-        .stat-card:hover { border-color: rgba(0,229,255,0.08); transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+        .stat-card:hover { border-color: rgba(56,189,248,0.08); transform: translateY(-3px); box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
         .stat-card .num { font-family: 'Orbitron', monospace; font-size: 2.2em; font-weight: 700; line-height: 1.2; }
-        .stat-card .lbl { color: #A8B3CF; font-size: 0.7em; margin-top: 5px; letter-spacing: 1.2px; text-transform: uppercase; }
+        .stat-card .lbl { color: #8899BB; font-size: 0.7em; margin-top: 5px; letter-spacing: 1.2px; text-transform: uppercase; }
         .stat-card .icon { font-size: 1.1em; margin-bottom: 4px; opacity: 0.4; }
-        .num-accounts { color: #4D7CFE; }
-        .num-likes { color: #A855F7; }
-        .num-targets { color: #FFC107; }
-        .num-queue { color: #00E5FF; }
-        .num-users { color: #00E676; }
+        .num-accounts { color: #60A5FA; }
+        .num-likes { color: #A78BFA; }
+        .num-targets { color: #FBBF24; }
+        .num-queue { color: #38BDF8; }
+        .num-users { color: #34D399; }
         
         .panel {
             padding: 20px 24px;
             margin-bottom: 20px;
-            background: rgba(28,33,40,0.6);
+            background: rgba(12,22,40,0.6);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.08);
             border-radius: 16px;
         }
-        .panel h2 { color: #A8B3CF; font-size: 0.9em; margin-bottom: 14px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
-        .panel h2 i { margin-right: 10px; color: #00E5FF; }
+        .panel h2 { color: #8899BB; font-size: 0.9em; margin-bottom: 14px; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
+        .panel h2 i { margin-right: 10px; color: #38BDF8; }
         
         .input-group {
             display: flex;
@@ -343,16 +345,16 @@ ADMIN_HTML = '''
         .input-group input, .input-group select {
             padding: 10px 16px;
             border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.1);
             background: rgba(0,0,0,0.25);
-            color: #F8FAFC;
+            color: #F0F4FF;
             font-size: 0.9em;
             font-family: 'Inter', sans-serif;
             min-width: 140px;
             transition: 0.3s;
         }
-        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
-        .input-group select option { background: #0D1117; }
+        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(56,189,248,0.2); box-shadow: 0 0 20px rgba(56,189,248,0.04); }
+        .input-group select option { background: #0C1628; }
         
         .btn {
             padding: 10px 22px;
@@ -370,42 +372,44 @@ ADMIN_HTML = '''
             min-height: 42px;
         }
         .btn:hover { transform: translateY(-2px); }
-        .btn-primary { background: linear-gradient(135deg, #00E5FF, #00E676); color: #0D1117; border: none; }
-        .btn-primary:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        .btn-success { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.1); }
-        .btn-success:hover { background: rgba(0,230,118,0.2); }
-        .btn-danger { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.1); }
-        .btn-danger:hover { background: rgba(255,77,109,0.2); }
-        .btn-rocket { background: linear-gradient(135deg, #FF4D6D, #FF6B8A); color: #0D1117; border: none; }
-        .btn-rocket:hover { box-shadow: 0 0 30px rgba(255,77,109,0.2); transform: scale(1.02); }
-        .btn-warning { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.1); }
-        .btn-warning:hover { background: rgba(255,200,0,0.2); }
+        .btn-primary { background: linear-gradient(135deg, #38BDF8, #34D399); color: #080C14; border: none; }
+        .btn-primary:hover { box-shadow: 0 0 30px rgba(56,189,248,0.2); }
+        .btn-success { background: rgba(52,211,153,0.12); color: #34D399; border: 1px solid rgba(52,211,153,0.1); }
+        .btn-success:hover { background: rgba(52,211,153,0.2); }
+        .btn-danger { background: rgba(248,113,113,0.12); color: #F87171; border: 1px solid rgba(248,113,113,0.1); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); }
+        .btn-rocket { background: linear-gradient(135deg, #F472B6, #F87171); color: #080C14; border: none; }
+        .btn-rocket:hover { box-shadow: 0 0 30px rgba(248,113,113,0.2); transform: scale(1.02); }
+        .btn-warning { background: rgba(251,191,36,0.12); color: #FBBF24; border: 1px solid rgba(251,191,36,0.1); }
+        .btn-warning:hover { background: rgba(251,191,36,0.2); }
+        .btn-purple { background: rgba(167,139,250,0.12); color: #A78BFA; border: 1px solid rgba(167,139,250,0.1); }
+        .btn-purple:hover { background: rgba(167,139,250,0.2); }
         
         .user-item {
-            background: rgba(22,27,34,0.5);
+            background: rgba(12,22,40,0.5);
             padding: 6px 16px;
             border-radius: 20px;
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            border: 1px solid rgba(43,52,66,0.3);
+            border: 1px solid rgba(56,189,248,0.08);
             margin: 3px;
             font-size: 0.85em;
             transition: 0.3s;
         }
-        .user-item:hover { border-color: rgba(0,229,255,0.1); }
-        .user-item .uid { font-weight: 600; color: #00E5FF; }
-        .user-item .stats { color: #A8B3CF; font-size: 0.75em; }
-        .user-item .stats span { color: #00E676; font-weight: 600; }
-        .user-item .del-btn { background: none; border: none; color: #FF4D6D; cursor: pointer; padding: 0 4px; font-size: 1em; }
+        .user-item:hover { border-color: rgba(56,189,248,0.1); }
+        .user-item .uid { font-weight: 600; color: #38BDF8; }
+        .user-item .stats { color: #8899BB; font-size: 0.75em; }
+        .user-item .stats span { color: #34D399; font-weight: 600; }
+        .user-item .del-btn { background: none; border: none; color: #F87171; cursor: pointer; padding: 0 4px; font-size: 1em; }
         
-        .section-title { font-size: 1em; color: #F8FAFC; margin: 20px 0 10px; display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.3px; }
-        .live-dot { display: inline-block; width: 7px; height: 7px; background: #00E676; border-radius: 50%; animation: glowPulse 1.5s infinite; }
-        .note { color: #A8B3CF; font-size: 0.8em; margin-top: 8px; }
+        .section-title { font-size: 1em; color: #F0F4FF; margin: 20px 0 10px; display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.3px; }
+        .live-dot { display: inline-block; width: 7px; height: 7px; background: #34D399; border-radius: 50%; animation: glowPulse 1.5s infinite; }
+        .note { color: #8899BB; font-size: 0.8em; margin-top: 8px; }
         
         .history-item {
             padding: 8px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.2);
+            border-bottom: 1px solid rgba(56,189,248,0.08);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -413,10 +417,10 @@ ADMIN_HTML = '''
             gap: 6px;
             font-size: 0.85em;
         }
-        .history-item .uid { color: #00E5FF; font-weight: 600; }
-        .history-item .name { color: #F8FAFC; }
-        .history-item .likes { color: #00E676; font-weight: 600; }
-        .history-item .time { color: #A8B3CF; font-size: 0.75em; }
+        .history-item .uid { color: #38BDF8; font-weight: 600; }
+        .history-item .name { color: #F0F4FF; }
+        .history-item .likes { color: #34D399; font-weight: 600; }
+        .history-item .time { color: #8899BB; font-size: 0.75em; }
         
         .logs-container {
             max-height: 300px;
@@ -426,13 +430,13 @@ ADMIN_HTML = '''
             background: rgba(0,0,0,0.2);
             border-radius: 12px;
             padding: 12px 16px;
-            border: 1px solid rgba(43,52,66,0.15);
+            border: 1px solid rgba(56,189,248,0.08);
         }
-        .log-entry { padding: 4px 0; border-bottom: 1px solid rgba(43,52,66,0.08); color: #A8B3CF; display: flex; gap: 12px; }
-        .log-entry .log-time { color: #00E5FF; min-width: 60px; }
-        .log-entry .log-success { color: #00E676; }
-        .log-entry .log-error { color: #FF4D6D; }
-        .log-entry .log-info { color: #FFC107; }
+        .log-entry { padding: 4px 0; border-bottom: 1px solid rgba(56,189,248,0.05); color: #8899BB; display: flex; gap: 12px; }
+        .log-entry .log-time { color: #38BDF8; min-width: 60px; }
+        .log-entry .log-success { color: #34D399; }
+        .log-entry .log-error { color: #F87171; }
+        .log-entry .log-info { color: #FBBF24; }
         
         .user-db-table {
             width: 100%;
@@ -441,25 +445,25 @@ ADMIN_HTML = '''
             font-size: 0.85em;
         }
         .user-db-table th {
-            background: rgba(0,229,255,0.03);
+            background: rgba(56,189,248,0.03);
             padding: 10px 16px;
             text-align: left;
             font-weight: 600;
-            color: #A8B3CF;
-            border-bottom: 1px solid rgba(43,52,66,0.3);
+            color: #8899BB;
+            border-bottom: 1px solid rgba(56,189,248,0.08);
             text-transform: uppercase;
             font-size: 0.7em;
             letter-spacing: 0.8px;
         }
         .user-db-table td {
             padding: 10px 16px;
-            border-bottom: 1px solid rgba(43,52,66,0.15);
+            border-bottom: 1px solid rgba(56,189,248,0.05);
         }
         .badge { padding: 2px 12px; border-radius: 20px; font-size: 0.65em; font-weight: 600; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-active { background: rgba(0,230,118,0.12); color: #00E676; border: 1px solid rgba(0,230,118,0.06); }
-        .badge-inactive { background: rgba(255,77,109,0.12); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.06); }
-        .badge-unlocked { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid rgba(0,229,255,0.06); }
-        .badge-locked { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.06); }
+        .badge-active { background: rgba(52,211,153,0.12); color: #34D399; border: 1px solid rgba(52,211,153,0.06); }
+        .badge-inactive { background: rgba(248,113,113,0.12); color: #F87171; border: 1px solid rgba(248,113,113,0.06); }
+        .badge-unlocked { background: rgba(56,189,248,0.12); color: #38BDF8; border: 1px solid rgba(56,189,248,0.06); }
+        .badge-locked { background: rgba(251,191,36,0.12); color: #FBBF24; border: 1px solid rgba(251,191,36,0.06); }
         
         .result-modal {
             display: none;
@@ -473,25 +477,41 @@ ADMIN_HTML = '''
         }
         .result-modal.active { display: flex; }
         .result-box {
-            background: #161B22;
+            background: #0C1628;
             padding: 32px 36px;
             border-radius: 18px;
             max-width: 500px;
             width: 90%;
-            border: 1px solid rgba(43,52,66,0.4);
-            box-shadow: 0 0 60px rgba(0,229,255,0.03);
+            border: 1px solid rgba(56,189,248,0.1);
+            box-shadow: 0 0 60px rgba(56,189,248,0.03);
             animation: fadeInUp 0.4s ease;
         }
-        .result-box h2 { font-family: 'Orbitron', monospace; font-size: 1.1em; color: #00E5FF; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-        .result-box .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(43,52,66,0.2); }
-        .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
-        .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
-        .result-box .row .value-failed { color: #FF4D6D; }
-        .result-box .close-btn { margin-top: 16px; padding: 10px; background: rgba(255,255,255,0.04); color: #A8B3CF; border: 1px solid rgba(43,52,66,0.3); border-radius: 12px; cursor: pointer; font-weight: 600; width: 100%; transition: 0.3s; font-family: 'Inter', sans-serif; font-size: 0.9em; }
-        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
+        .result-box h2 { font-family: 'Orbitron', monospace; font-size: 1.1em; color: #38BDF8; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .result-box .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(56,189,248,0.08); }
+        .result-box .row .label { color: #8899BB; font-size: 0.9em; }
+        .result-box .row .value { color: #34D399; font-weight: 600; font-size: 0.9em; }
+        .result-box .row .value-failed { color: #F87171; }
+        .result-box .close-btn { margin-top: 16px; padding: 10px; background: rgba(255,255,255,0.04); color: #8899BB; border: 1px solid rgba(56,189,248,0.1); border-radius: 12px; cursor: pointer; font-weight: 600; width: 100%; transition: 0.3s; font-family: 'Inter', sans-serif; font-size: 0.9em; }
+        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F0F4FF; }
         
         .section { display: none; }
         .section.active { display: block; animation: fadeInUp 0.35s ease; }
+        
+        .server-accounts-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .server-account-item {
+            background: rgba(12,22,40,0.5);
+            padding: 4px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(56,189,248,0.05);
+            font-size: 0.75em;
+            color: #8899BB;
+            font-family: monospace;
+        }
         
         @media (max-width: 992px) { .main { padding: 18px 20px; } .stats-grid { grid-template-columns: repeat(3, 1fr); } .nav-grid { grid-template-columns: repeat(4, 1fr); } .title-section h1 { font-size: 2em; } .server-selector-row { flex-direction: column; gap: 10px; } }
         @media (max-width: 768px) { .main { padding: 14px 16px; } .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } .stat-card { padding: 14px 10px; min-height: 80px; } .stat-card .num { font-size: 1.6em; } .nav-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; } .nav-btn { font-size: 0.7em; padding: 10px 12px; min-height: 38px; } .title-section h1 { font-size: 1.6em; } .title-section .sub-title { font-size: 0.7em; letter-spacing: 4px; } .panel { padding: 16px 18px; } .input-group input, .input-group select { min-width: 100px; font-size: 0.8em; padding: 8px 12px; } .btn { font-size: 0.8em; padding: 8px 16px; min-height: 36px; } .result-box { padding: 20px; } .status-row .item { font-size: 0.7em; padding: 4px 12px; } .server-selector-row .server-status { font-size: 0.7em; padding: 4px 12px; } }
@@ -540,15 +560,16 @@ ADMIN_HTML = '''
             <button class="nav-btn" onclick="showSection('stats')"><i class="fas fa-chart-bar"></i> Stats</button>
             <button class="nav-btn" onclick="showSection('logs')"><i class="fas fa-terminal"></i> Logs</button>
             <button class="nav-btn" onclick="showSection('settings')"><i class="fas fa-cog"></i> Settings</button>
+            <button class="nav-btn" onclick="showSection('accounts')"><i class="fas fa-database"></i> Accounts</button>
         </div>
         
         <div id="section-dashboard" class="section active">
             <div class="stats-grid">
-                <div class="stat-card"><div class="icon" style="color:#4D7CFE;"><i class="fas fa-users"></i></div><div class="num num-accounts" id="total-accounts">0</div><div class="lbl">Accounts</div></div>
-                <div class="stat-card"><div class="icon" style="color:#A855F7;"><i class="fas fa-heart"></i></div><div class="num num-likes" id="total-likes">0</div><div class="lbl">Likes</div></div>
-                <div class="stat-card"><div class="icon" style="color:#FFC107;"><i class="fas fa-bullseye"></i></div><div class="num num-targets" id="targets-liked">0</div><div class="lbl">Targets</div></div>
-                <div class="stat-card"><div class="icon" style="color:#00E5FF;"><i class="fas fa-list-ul"></i></div><div class="num num-queue" id="auto-users">0</div><div class="lbl">Queue</div></div>
-                <div class="stat-card"><div class="icon" style="color:#00E676;"><i class="fas fa-user-plus"></i></div><div class="num num-users" id="total-users">0</div><div class="lbl">Users</div></div>
+                <div class="stat-card"><div class="icon" style="color:#60A5FA;"><i class="fas fa-users"></i></div><div class="num num-accounts" id="total-accounts">0</div><div class="lbl">Accounts</div></div>
+                <div class="stat-card"><div class="icon" style="color:#A78BFA;"><i class="fas fa-heart"></i></div><div class="num num-likes" id="total-likes">0</div><div class="lbl">Likes</div></div>
+                <div class="stat-card"><div class="icon" style="color:#FBBF24;"><i class="fas fa-bullseye"></i></div><div class="num num-targets" id="targets-liked">0</div><div class="lbl">Targets</div></div>
+                <div class="stat-card"><div class="icon" style="color:#38BDF8;"><i class="fas fa-list-ul"></i></div><div class="num num-queue" id="auto-users">0</div><div class="lbl">Queue</div></div>
+                <div class="stat-card"><div class="icon" style="color:#34D399;"><i class="fas fa-user-plus"></i></div><div class="num num-users" id="total-users">0</div><div class="lbl">Users</div></div>
             </div>
         </div>
         
@@ -593,8 +614,8 @@ ADMIN_HTML = '''
         
         <div id="section-auto" class="section">
             <div class="panel">
-                <h2><i class="fas fa-clock"></i> Auto Like</h2>
-                <p style="color:#A8B3CF; margin-bottom:12px; font-size:0.85em;">Manage user auto-like targets and unlock status.</p>
+                <h2><i class="fas fa-clock"></i> Auto Like Management</h2>
+                <p style="color:#8899BB; margin-bottom:12px; font-size:0.85em;">Manage user auto-like targets and unlock status.</p>
                 <div style="margin-bottom:15px; display:flex; flex-wrap:wrap; gap:10px;">
                     <div class="input-group" style="flex:1;">
                         <input type="email" id="user-email-unlock" placeholder="User Email" style="min-width:200px;" />
@@ -602,6 +623,13 @@ ADMIN_HTML = '''
                     </div>
                 </div>
                 <div class="note"><i class="fas fa-info-circle"></i> Unlock auto-like for users so they can add targets on public page.</div>
+            </div>
+            <div class="panel">
+                <h2><i class="fas fa-list"></i> Auto-Queue Users</h2>
+                <div id="auto-user-list"></div>
+                <div style="margin-top:12px;">
+                    <button class="btn btn-danger" onclick="deleteAllAuto()"><i class="fas fa-trash"></i> Clear All</button>
+                </div>
             </div>
         </div>
         
@@ -650,7 +678,7 @@ ADMIN_HTML = '''
             <div class="panel">
                 <h2><i class="fas fa-cog"></i> Settings</h2>
                 <div style="margin-bottom:12px;">
-                    <label style="color:#A8B3CF; font-size:0.85em;">Auto-Like Time (IST)</label>
+                    <label style="color:#8899BB; font-size:0.85em;">Auto-Like Time (IST)</label>
                     <div class="input-group" style="margin-top:6px;">
                         <input type="number" id="set-hour" placeholder="Hour" value="4" style="width:80px;" />
                         <input type="number" id="set-minute" placeholder="Minute" value="0" style="width:80px;" />
@@ -660,7 +688,31 @@ ADMIN_HTML = '''
                         Current: <span id="current-auto-time">04:00 IST</span>
                     </div>
                 </div>
-                <div id="time-status" style="color:#00E676; font-size:0.85em;"></div>
+                <div id="time-status" style="color:#34D399; font-size:0.85em;"></div>
+            </div>
+        </div>
+        
+        <div id="section-accounts" class="section">
+            <div class="panel">
+                <h2><i class="fas fa-database"></i> Account Management</h2>
+                <div style="margin-bottom:12px;">
+                    <div class="input-group">
+                        <select id="account-server-select" onchange="loadAccountsList(this.value)">
+                            <option value="IND">India</option>
+                            <option value="BD">Bangladesh</option>
+                            <option value="MENA">MENA</option>
+                            <option value="BR">Brazil</option>
+                            <option value="US">US</option>
+                            <option value="SAC">SAC</option>
+                            <option value="NA">NA</option>
+                            <option value="RU">Russia</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="refreshAccounts()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                </div>
+                <div id="accounts-list-content">
+                    <div class="note">Select a server to view accounts.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -701,6 +753,7 @@ ADMIN_HTML = '''
             if (id === 'settings') loadAutoTime();
             if (id === 'users') loadUsersDB();
             if (id === 'codes') loadCodes();
+            if (id === 'accounts') loadAccountsList(document.getElementById('account-server-select').value);
         }
         
         function formatTime(iso) {
@@ -732,7 +785,42 @@ ADMIN_HTML = '''
                     document.getElementById('lastAutoRun').textContent = data.last_auto_run ? formatTime(data.last_auto_run) : 'Never';
                     document.getElementById('autoRunStatus').textContent = data.auto_run_status || 'Idle';
                     document.getElementById('autoRunMessage').textContent = data.auto_run_message || '-';
+                    
+                    let userHtml = '';
+                    if (data.users && data.users.length > 0) {
+                        data.users.forEach(user => {
+                            const s = data.user_stats[user] || { total_likes: 0, today_likes: 0 };
+                            userHtml += `<div class="user-item"><span class="uid">${user}</span><span class="stats">T:<span>${s.total_likes||0}</span> D:<span>${s.today_likes||0}</span></span><button class="del-btn" onclick="deleteUser('${user}')"><i class="fas fa-times"></i></button></div>`;
+                        });
+                    } else {
+                        userHtml = '<div class="note">No users in auto-queue</div>';
+                    }
+                    document.getElementById('auto-user-list').innerHTML = userHtml;
                 });
+        }
+        
+        function loadAccountsList(server) {
+            fetch('/api/admin/accounts?server=' + server)
+                .then(res => res.json())
+                .then(data => {
+                    let html = '';
+                    if (data.accounts && data.accounts.length > 0) {
+                        html += `<div style="margin-bottom:10px;color:#8899BB;font-size:0.85em;">Total: <strong style="color:#38BDF8;">${data.accounts.length}</strong> accounts</div>`;
+                        html += `<div class="server-accounts-list">`;
+                        data.accounts.forEach(acc => {
+                            html += `<span class="server-account-item">${acc.uid}</span>`;
+                        });
+                        html += `</div>`;
+                    } else {
+                        html = '<div class="note">No accounts found for this server.</div>';
+                    }
+                    document.getElementById('accounts-list-content').innerHTML = html;
+                });
+        }
+        
+        function refreshAccounts() {
+            const server = document.getElementById('account-server-select').value;
+            loadAccountsList(server);
         }
         
         function loadHistory() {
@@ -760,25 +848,25 @@ ADMIN_HTML = '''
                 .then(res => res.json())
                 .then(data => {
                     let html = `
-                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                            <span style="color:#A8B3CF;">Total Likes Sent</span>
-                            <span style="color:#00E676;font-weight:600;">${data.total_likes_sent}</span>
+                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(56,189,248,0.08);">
+                            <span style="color:#8899BB;">Total Likes Sent</span>
+                            <span style="color:#34D399;font-weight:600;">${data.total_likes_sent}</span>
                         </div>
-                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                            <span style="color:#A8B3CF;">Total Targets</span>
-                            <span style="color:#00E676;font-weight:600;">${data.total_targets}</span>
+                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(56,189,248,0.08);">
+                            <span style="color:#8899BB;">Total Targets</span>
+                            <span style="color:#34D399;font-weight:600;">${data.total_targets}</span>
                         </div>
-                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                            <span style="color:#A8B3CF;">Queue Users</span>
-                            <span style="color:#00E676;font-weight:600;">${data.auto_users}</span>
-                        </div>
-                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;">
-                            <span style="color:#A8B3CF;">Registered Users</span>
-                            <span style="color:#00E676;font-weight:600;">${data.total_users}</span>
+                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(56,189,248,0.08);">
+                            <span style="color:#8899BB;">Queue Users</span>
+                            <span style="color:#34D399;font-weight:600;">${data.auto_users}</span>
                         </div>
                         <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;">
-                            <span style="color:#A8B3CF;">Next Reset</span>
-                            <span style="color:#FFC107;font-weight:600;">${data.next_reset}</span>
+                            <span style="color:#8899BB;">Registered Users</span>
+                            <span style="color:#34D399;font-weight:600;">${data.total_users}</span>
+                        </div>
+                        <div class="row" style="display:flex;justify-content:space-between;padding:8px 0;">
+                            <span style="color:#8899BB;">Next Reset</span>
+                            <span style="color:#FBBF24;font-weight:600;">${data.next_reset}</span>
                         </div>
                     `;
                     document.getElementById('stats-content').innerHTML = html;
@@ -836,7 +924,7 @@ ADMIN_HTML = '''
                             `;
                         });
                     } else {
-                        html += `<tr><td colspan="6" style="text-align:center;color:#A8B3CF;">No users registered</td></tr>`;
+                        html += `<tr><td colspan="6" style="text-align:center;color:#8899BB;">No users registered</td></tr>`;
                     }
                     html += `</tbody></table></div>`;
                     document.getElementById('user-db-content').innerHTML = html;
@@ -850,8 +938,8 @@ ADMIN_HTML = '''
                     let html = '';
                     if (data.codes && data.codes.length > 0) {
                         data.codes.forEach(code => {
-                            html += `<div class="user-item" style="background:rgba(0,229,255,0.05);border-color:rgba(0,229,255,0.1);">
-                                <span style="font-family:monospace;font-weight:700;color:#00E5FF;">${code}</span>
+                            html += `<div class="user-item" style="background:rgba(56,189,248,0.05);border-color:rgba(56,189,248,0.1);">
+                                <span style="font-family:monospace;font-weight:700;color:#38BDF8;">${code}</span>
                             </div>`;
                         });
                     } else {
@@ -880,7 +968,7 @@ ADMIN_HTML = '''
             const uid = document.getElementById('target-uid-send').value.trim();
             const server = document.getElementById('server-send').value;
             if (!uid) { alert('Enter a target UID'); return; }
-            if (!confirm(`Send ALL likes to ${uid} on ${server}?`)) return;
+            if (!confirm('Send ALL likes to ' + uid + ' on ' + server + '?')) return;
             
             const btn = document.querySelector('.btn-rocket');
             const originalText = btn.innerHTML;
@@ -918,16 +1006,16 @@ ADMIN_HTML = '''
             .then(res => res.json())
             .then(data => {
                 if (data.error) {
-                    document.getElementById('admin-verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    document.getElementById('admin-verify-result').innerHTML = '<div style="color:#F87171;">' + data.error + '</div>';
                     return;
                 }
                 document.getElementById('admin-verify-result').innerHTML = `
-                    <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
-                        <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
-                        <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
-                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
+                    <div style="background:rgba(12,22,40,0.5);padding:14px;border-radius:12px;border:1px solid rgba(56,189,248,0.08);">
+                        <div style="color:#38BDF8;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
+                        <div style="color:#F0F4FF;font-size:0.9em;">Name: ${data.username}</div>
+                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#8899BB;">
                             <span>Total Likes</span>
-                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
+                            <span style="color:#34D399;font-weight:600;">${data.likes}</span>
                         </div>
                     </div>
                 `;
@@ -968,6 +1056,20 @@ ADMIN_HTML = '''
             });
         }
         
+        function deleteUser(uid) {
+            if (!confirm('Remove ' + uid + ' from auto-queue?')) return;
+            fetch('/delete-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) })
+                .then(res => res.json())
+                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
+        }
+        
+        function deleteAllAuto() {
+            if (!confirm('Clear entire auto-queue?')) return;
+            fetch('/delete-all-users', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
+        }
+        
         function setAutoTime() {
             const hour = parseInt(document.getElementById('set-hour').value);
             const minute = parseInt(document.getElementById('set-minute').value);
@@ -983,7 +1085,7 @@ ADMIN_HTML = '''
             .then(res => res.json())
             .then(data => {
                 document.getElementById('time-status').textContent = data.message;
-                document.getElementById('current-auto-time').textContent = `${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')} IST`;
+                document.getElementById('current-auto-time').textContent = String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + ' IST';
                 loadAdminData();
             });
         }
@@ -1051,6 +1153,14 @@ def dashboard_data():
         'auto_run_message': '',
         'auto_time': f"{AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d}"
     })
+
+@admin_bp.route('/api/admin/accounts')
+def get_admin_accounts():
+    if not session.get('logged_in'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    server = request.args.get('server', 'IND')
+    accounts = load_accounts(server)
+    return jsonify({'accounts': accounts, 'total': len(accounts)})
 
 @admin_bp.route('/api/auto-time')
 def get_auto_time():
@@ -1184,6 +1294,31 @@ def send_likes():
         'failed': result.get('failed', 0),
         'server': server_name
     })
+
+@admin_bp.route('/delete-user', methods=['POST'])
+def delete_user():
+    if not session.get('logged_in'):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    uid = data.get('uid', '').strip()
+    if uid in auto_like_users:
+        auto_like_users.remove(uid)
+        if uid in user_stats:
+            del user_stats[uid]
+        save_users()
+        add_activity_log(f"Removed {uid} from auto-queue", "info")
+        return jsonify({'success': True, 'message': f'Removed {uid}'})
+    return jsonify({'success': False, 'message': 'UID not found'})
+
+@admin_bp.route('/delete-all-users', methods=['POST'])
+def delete_all_users():
+    if not session.get('logged_in'):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    auto_like_users.clear()
+    user_stats.clear()
+    save_users()
+    add_activity_log("Cleared entire auto-queue", "info")
+    return jsonify({'success': True, 'message': 'All users deleted'})
 
 @admin_bp.route('/set-auto-time', methods=['POST'])
 def set_auto_time():
