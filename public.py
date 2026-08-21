@@ -1,17 +1,19 @@
-from flask import Blueprint, request, jsonify, render_template_string, session
+from flask import Blueprint, request, jsonify, session
 import asyncio
+
+public_bp = Blueprint('public', __name__)
+
+# Import from app after blueprint creation
 from app import (
     get_user_info, send_likes_all_accounts, update_user_stats,
     add_to_history, REGION_URLS, user_db, admin_codes,
     verify_admin_code, unlock_user_auto_like, add_auto_like_target,
     remove_auto_like_target, load_accounts, AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE,
-    add_activity_log, save_user_db
+    add_activity_log, save_user_db, liked_cache
 )
 
-public_bp = Blueprint('public', __name__)
-
 # ============================================================
-# PUBLIC HTML
+# PREMIUM PUBLIC HTML - No Emojis, Full Premium UI
 # ============================================================
 PUBLIC_HTML = '''
 <!DOCTYPE html>
@@ -19,750 +21,1202 @@ PUBLIC_HTML = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HEX CHEATS</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>HEX CHEATS - Premium Like Bot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ===== RESET & BASE ===== */
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #0D1117;
-            color: #F8FAFC;
-            min-height: 100vh;
-            background-image: radial-gradient(circle at 15% 20%, rgba(0,229,255,0.04) 0%, transparent 50%),
-                              radial-gradient(circle at 85% 80%, rgba(77,124,254,0.04) 0%, transparent 50%);
+        
+        :root {
+            --bg-primary: #080C14;
+            --bg-secondary: #0C1628;
+            --bg-card: rgba(18, 30, 50, 0.85);
+            --bg-card-hover: rgba(25, 40, 65, 0.9);
+            --border-color: rgba(56, 189, 248, 0.08);
+            --border-active: rgba(56, 189, 248, 0.25);
+            --text-primary: #F0F4FF;
+            --text-secondary: #8899BB;
+            --text-muted: #556688;
+            --accent-cyan: #38BDF8;
+            --accent-green: #34D399;
+            --accent-purple: #818CF8;
+            --accent-pink: #F472B6;
+            --accent-gold: #FBBF24;
+            --shadow-glow: 0 0 40px rgba(56, 189, 248, 0.04);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .main { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
-        .title-section { text-align: center; padding: 20px 0; }
-        .title-section h1 {
+        
+        html { scroll-behavior: smooth; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(ellipse at 10% 20%, rgba(56, 189, 248, 0.03) 0%, transparent 60%),
+                radial-gradient(ellipse at 90% 80%, rgba(52, 211, 153, 0.02) 0%, transparent 60%);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 10px; opacity: 0.3; }
+        ::-webkit-scrollbar-thumb:hover { opacity: 0.6; }
+        
+        /* ===== UTILITY ===== */
+        .container { max-width: 820px; margin: 0 auto; padding: 20px 24px; }
+        .text-gradient {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .text-gradient-gold {
+            background: linear-gradient(135deg, var(--accent-gold), #F59E0B);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* ===== ANIMATIONS ===== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+        
+        .animate-in { animation: fadeInUp 0.6s ease forwards; }
+        .animate-in-delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .animate-in-delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .animate-in-delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .animate-in-delay-4 { animation-delay: 0.4s; opacity: 0; }
+        .animate-in-delay-5 { animation-delay: 0.5s; opacity: 0; }
+        
+        /* ===== HEADER ===== */
+        .header {
+            text-align: center;
+            padding: 30px 0 18px;
+            position: relative;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), var(--accent-green), transparent);
+        }
+        .header .logo {
             font-family: 'Orbitron', monospace;
             font-size: 2.8em;
             font-weight: 900;
-            background: linear-gradient(135deg, #00E5FF, #00E676);
+            letter-spacing: 6px;
+            background: linear-gradient(135deg, #38BDF8 0%, #34D399 40%, #818CF8 70%, #F472B6 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: 4px;
-            animation: titleGlow 3s ease-in-out infinite;
+            background-clip: text;
+            text-shadow: none;
+            filter: drop-shadow(0 0 30px rgba(56, 189, 248, 0.08));
         }
-        @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
-        .title-section .sub-title { font-size: 0.9em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
+        .header .subtitle {
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            letter-spacing: 10px;
+            text-transform: uppercase;
+            margin-top: 2px;
+            font-weight: 300;
+        }
         
+        /* ===== STATUS BAR ===== */
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding: 14px 20px;
+            margin: 16px 0 20px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-glow);
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+        .status-item i { color: var(--accent-cyan); font-size: 0.9em; width: 18px; text-align: center; }
+        .status-item .value { color: var(--text-primary); font-weight: 600; }
+        .status-item .value.green { color: var(--accent-green); }
+        .status-item .value.gold { color: var(--accent-gold); }
+        .status-divider {
+            width: 1px;
+            height: 24px;
+            background: var(--border-color);
+        }
+        
+        /* ===== TABS ===== */
         .tabs {
             display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
+            gap: 4px;
+            padding: 4px;
+            margin: 4px 0 20px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
         .tab-btn {
-            padding: 12px 24px;
-            background: rgba(22,27,34,0.6);
-            border: 1px solid rgba(43,52,66,0.3);
-            border-radius: 12px;
-            color: #A8B3CF;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 0.85em;
-            transition: 0.3s;
+            flex: 1;
+            min-width: 80px;
+            padding: 12px 18px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-secondary);
             font-family: 'Inter', sans-serif;
-            display: inline-flex;
+            font-size: 0.78em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
-        }
-        .tab-btn:hover { background: rgba(0,229,255,0.05); color: #00E5FF; }
-        .tab-btn.active-tab {
-            background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,230,118,0.10));
-            color: #00E5FF;
-            border-color: rgba(0,229,255,0.2);
+            white-space: nowrap;
+            letter-spacing: 0.3px;
         }
         .tab-btn i { font-size: 0.9em; }
-        
-        .glass {
-            background: rgba(22,27,34,0.85);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(43,52,66,0.4);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-            border-radius: 16px;
-            transition: 0.3s;
-            padding: 30px;
-            margin-bottom: 20px;
+        .tab-btn:hover { color: var(--text-primary); background: rgba(56, 189, 248, 0.04); }
+        .tab-btn.active {
+            background: rgba(56, 189, 248, 0.08);
+            color: var(--accent-cyan);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.04);
         }
-        .glass:hover { border-color: rgba(0,229,255,0.12); }
+        .tab-btn.active i { color: var(--accent-cyan); }
         
-        .tab-content { display: none; }
-        .tab-content.active-tab { display: block; animation: fadeInUp 0.35s ease; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .server-status-bar {
+        /* ===== CARDS ===== */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 28px 30px;
+            margin-bottom: 18px;
+            transition: var(--transition);
+            box-shadow: var(--shadow-glow);
+        }
+        .card:hover { border-color: var(--border-active); }
+        .card-title {
+            font-size: 0.7em;
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 16px;
             display: flex;
-            justify-content: center;
             align-items: center;
-            gap: 15px;
-            flex-wrap: wrap;
-            padding: 10px 0;
-            margin-bottom: 10px;
+            gap: 10px;
         }
-        .server-status-bar .status-item {
-            background: rgba(0,0,0,0.2);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            color: #A8B3CF;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .server-status-bar .status-item i { color: #00E5FF; }
-        .server-status-bar .status-item .count { color: #00E676; font-weight: 700; }
+        .card-title i { color: var(--accent-cyan); font-size: 1em; }
         
+        /* ===== TAB CONTENT ===== */
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+        
+        /* ===== FORM ELEMENTS ===== */
         .input-group {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
             align-items: center;
         }
-        .input-group input, .input-group select {
-            padding: 12px 16px;
-            border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.3);
-            background: rgba(0,0,0,0.25);
-            color: #F8FAFC;
-            font-size: 1em;
-            font-family: 'Inter', sans-serif;
-            min-width: 140px;
-            transition: 0.3s;
+        .input-group .field {
             flex: 1;
+            min-width: 160px;
+            position: relative;
         }
-        .input-group input:focus, .input-group select:focus { outline: none; border-color: rgba(0,229,255,0.2); box-shadow: 0 0 20px rgba(0,229,255,0.04); }
-        .input-group select option { background: #0D1117; }
+        .input-group .field i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.85em;
+        }
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 13px 16px 13px 42px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+            transition: var(--transition);
+            outline: none;
+        }
+        .input-group input:focus,
+        .input-group select:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.06);
+        }
+        .input-group input::placeholder { color: var(--text-muted); }
+        .input-group select { padding-left: 16px; appearance: none; cursor: pointer; }
+        .input-group select option { background: var(--bg-secondary); }
         
+        /* ===== BUTTONS ===== */
         .btn {
-            padding: 12px 24px;
+            padding: 13px 28px;
             border: none;
-            border-radius: 16px;
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85em;
+            font-weight: 600;
             cursor: pointer;
-            font-weight: 700;
-            font-size: 1em;
-            transition: 0.3s;
+            transition: var(--transition);
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            font-family: 'Inter', sans-serif;
             letter-spacing: 0.3px;
-            min-height: 48px;
             white-space: nowrap;
+            min-height: 48px;
         }
-        .btn:hover { transform: translateY(-2px); }
-        .btn-rocket {
-            background: linear-gradient(135deg, #00E5FF, #00E676);
-            color: #0D1117;
-            border: none;
+        .btn:active { transform: scale(0.97); }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), #0EA5E9);
+            color: #0C1628;
         }
-        .btn-rocket:hover { box-shadow: 0 0 30px rgba(0,229,255,0.2); }
-        .btn-telegram { background: rgba(0,136,204,0.15); color: #00BFFF; border: 1px solid rgba(0,136,204,0.2); }
-        .btn-telegram:hover { background: rgba(0,136,204,0.25); }
-        .btn-youtube { background: rgba(255,0,0,0.15); color: #FF4444; border: 1px solid rgba(255,0,0,0.2); }
-        .btn-youtube:hover { background: rgba(255,0,0,0.25); }
-        .btn-unlock { background: rgba(255,200,0,0.15); color: #FFC107; border: 1px solid rgba(255,200,0,0.2); }
-        .btn-unlock:hover { background: rgba(255,200,0,0.25); }
-        .btn-success { background: rgba(0,230,118,0.15); color: #00E676; border: 1px solid rgba(0,230,118,0.2); }
-        .btn-success:hover { background: rgba(0,230,118,0.25); }
-        .btn-danger { background: rgba(255,77,109,0.15); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.2); }
-        .btn-danger:hover { background: rgba(255,77,109,0.25); }
+        .btn-primary:hover {
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.2);
+            transform: translateY(-2px);
+        }
         
-        .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
+        .btn-success {
+            background: linear-gradient(135deg, var(--accent-green), #059669);
+            color: #0C1628;
+        }
+        .btn-success:hover {
+            box-shadow: 0 0 30px rgba(52, 211, 153, 0.2);
+            transform: translateY(-2px);
+        }
         
-        .social-links {
+        .btn-gold {
+            background: linear-gradient(135deg, var(--accent-gold), #F59E0B);
+            color: #0C1628;
+        }
+        .btn-gold:hover {
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-outline:hover {
+            border-color: var(--accent-cyan);
+            color: var(--text-primary);
+            background: rgba(56, 189, 248, 0.04);
+        }
+        
+        .btn-danger-outline {
+            background: transparent;
+            color: #F87171;
+            border: 1px solid rgba(248, 113, 113, 0.15);
+        }
+        .btn-danger-outline:hover {
+            background: rgba(248, 113, 113, 0.08);
+            border-color: rgba(248, 113, 113, 0.25);
+        }
+        
+        .btn-sm { padding: 8px 16px; min-height: 36px; font-size: 0.75em; }
+        .btn-block { width: 100%; justify-content: center; }
+        
+        /* ===== NOTE ===== */
+        .note {
+            color: var(--text-secondary);
+            font-size: 0.78em;
+            margin-top: 12px;
             display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-top: 20px;
-            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
         }
-        .social-links a { text-decoration: none; }
+        .note i { color: var(--text-muted); font-size: 0.85em; }
         
-        .user-item {
-            background: rgba(22,27,34,0.5);
-            padding: 6px 16px;
-            border-radius: 20px;
+        /* ===== VERIFY RESULT ===== */
+        .verify-result {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 16px 20px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            margin-top: 14px;
+        }
+        .verify-result .row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 0.85em;
+        }
+        .verify-result .label { color: var(--text-secondary); }
+        .verify-result .value { color: var(--text-primary); font-weight: 500; }
+        .verify-result .value.highlight { color: var(--accent-cyan); }
+        .verify-result .value.green { color: var(--accent-green); }
+        
+        /* ===== TARGET LIST ===== */
+        .target-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .target-item {
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            border: 1px solid rgba(43,52,66,0.3);
-            margin: 3px;
-            font-size: 0.85em;
-            transition: 0.3s;
+            padding: 6px 14px 6px 18px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            font-size: 0.82em;
+            transition: var(--transition);
         }
-        .user-item .uid { font-weight: 600; color: #00E5FF; }
-        .user-item .del-btn { background: none; border: none; color: #FF4D6D; cursor: pointer; padding: 0 4px; font-size: 1em; }
+        .target-item:hover { border-color: var(--border-active); }
+        .target-item .uid { color: var(--accent-cyan); font-weight: 500; font-family: 'Inter', monospace; }
+        .target-item .remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.85em;
+            padding: 2px;
+            transition: var(--transition);
+        }
+        .target-item .remove:hover { color: #F87171; }
         
-        .result-modal {
+        /* ===== HISTORY ===== */
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.82em;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .history-item:last-child { border-bottom: none; }
+        .history-item .uid { color: var(--accent-cyan); font-weight: 500; }
+        .history-item .name { color: var(--text-primary); }
+        .history-item .likes { color: var(--accent-green); font-weight: 600; }
+        .history-item .time { color: var(--text-muted); font-size: 0.75em; }
+        
+        /* ===== STATUS DISPLAY ===== */
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .status-grid .stat {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+        }
+        .status-grid .stat .label { color: var(--text-secondary); font-size: 0.7em; text-transform: uppercase; letter-spacing: 1px; }
+        .status-grid .stat .value { font-size: 1.1em; font-weight: 600; margin-top: 2px; }
+        
+        /* ===== LOCKED STATE ===== */
+        .locked-state {
+            text-align: center;
+            padding: 24px 0 12px;
+        }
+        .locked-state .icon {
+            font-size: 3em;
+            color: var(--accent-gold);
+            opacity: 0.3;
+            margin-bottom: 10px;
+        }
+        .locked-state p { color: var(--text-secondary); font-size: 0.85em; }
+        .locked-state .unlock-form {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        .locked-state .unlock-form input {
+            padding: 12px 18px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85em;
+            min-width: 200px;
+            outline: none;
+            transition: var(--transition);
+        }
+        .locked-state .unlock-form input:focus { border-color: var(--accent-gold); }
+        .locked-state .unlock-form input::placeholder { color: var(--text-muted); }
+        
+        /* ===== SOCIAL LINKS ===== */
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 8px 0 4px;
+        }
+        .social-links .btn {
+            padding: 10px 22px;
+            font-size: 0.78em;
+            min-height: 40px;
+        }
+        .btn-telegram {
+            background: rgba(0, 136, 204, 0.12);
+            color: #60A5FA;
+            border: 1px solid rgba(96, 165, 250, 0.12);
+        }
+        .btn-telegram:hover {
+            background: rgba(0, 136, 204, 0.2);
+            border-color: rgba(96, 165, 250, 0.25);
+            transform: translateY(-2px);
+        }
+        .btn-youtube {
+            background: rgba(255, 0, 0, 0.08);
+            color: #F87171;
+            border: 1px solid rgba(248, 113, 113, 0.12);
+        }
+        .btn-youtube:hover {
+            background: rgba(255, 0, 0, 0.15);
+            border-color: rgba(248, 113, 113, 0.25);
+            transform: translateY(-2px);
+        }
+        
+        /* ===== FOOTER ===== */
+        .footer-help {
+            text-align: center;
+            padding: 20px;
+            margin-top: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+        }
+        .footer-help h3 {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+        .footer-help p {
+            color: var(--text-muted);
+            font-size: 0.8em;
+            margin-top: 4px;
+        }
+        .footer-help a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            transition: var(--transition);
+        }
+        .footer-help a:hover { color: var(--accent-green); }
+        
+        /* ===== MODAL ===== */
+        .modal-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85);
-            z-index: 999;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(12px);
+            z-index: 1000;
             align-items: center;
             justify-content: center;
-            backdrop-filter: blur(8px);
+            padding: 20px;
         }
-        .result-modal.active { display: flex; }
-        .result-box {
-            background: #161B22;
-            padding: 35px 40px;
-            border-radius: 18px;
-            max-width: 500px;
-            width: 90%;
-            border: 1px solid rgba(43,52,66,0.4);
-            box-shadow: 0 0 60px rgba(0,229,255,0.03);
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 32px 36px;
+            max-width: 480px;
+            width: 100%;
             animation: fadeInUp 0.4s ease;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
-        .result-box h2 {
+        .modal h2 {
             font-family: 'Orbitron', monospace;
-            font-size: 1.1em;
-            color: #00E5FF;
-            margin-bottom: 15px;
+            font-size: 1em;
+            color: var(--accent-cyan);
+            letter-spacing: 2px;
+            margin-bottom: 16px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .result-box .row {
+        .modal .row {
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.2);
-        }
-        .result-box .row .label { color: #A8B3CF; font-size: 0.9em; }
-        .result-box .row .value { color: #00E676; font-weight: 600; font-size: 0.9em; }
-        .result-box .row .value-failed { color: #FF4D6D; }
-        .result-box .close-btn {
-            margin-top: 16px;
-            padding: 10px;
-            background: rgba(255,255,255,0.04);
-            color: #A8B3CF;
-            border: 1px solid rgba(43,52,66,0.3);
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 600;
-            width: 100%;
-            transition: 0.3s;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.9em;
-        }
-        .result-box .close-btn:hover { background: rgba(255,255,255,0.08); color: #F8FAFC; }
-        
-        .footer-contact {
-            text-align: center;
-            margin-top: 30px;
-            padding: 20px;
-            background: rgba(255,200,0,0.05);
-            border-radius: 12px;
-            border: 1px solid rgba(255,200,0,0.1);
-        }
-        .footer-contact h3 { color: #FFC107; font-size: 1.1em; margin-bottom: 8px; }
-        .footer-contact p { color: #A8B3CF; font-size: 0.9em; }
-        .footer-contact a { color: #00E5FF; text-decoration: none; }
-        .footer-contact a:hover { text-decoration: underline; }
-        
-        .verify-result-box {
-            background: rgba(22,27,34,0.5);
-            padding: 14px;
-            border-radius: 12px;
-            border: 1px solid rgba(43,52,66,0.3);
-            margin-top: 12px;
-        }
-        .verify-result-box .uid-display { color: #00E5FF; font-weight: 600; font-size: 1em; }
-        .verify-result-box .name-display { color: #F8FAFC; font-size: 0.9em; }
-        .verify-result-box .likes-display { color: #00E676; font-weight: 600; font-size: 0.9em; }
-        .verify-result-box .row-display { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.85em; color: #A8B3CF; }
-        
-        .history-item {
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(43,52,66,0.2);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 6px;
+            border-bottom: 1px solid var(--border-color);
             font-size: 0.85em;
         }
-        .history-item .uid { color: #00E5FF; font-weight: 600; }
-        .history-item .name { color: #F8FAFC; }
-        .history-item .likes { color: #00E676; font-weight: 600; }
-        .history-item .time { color: #A8B3CF; font-size: 0.75em; }
-        
-        .badge { padding: 2px 12px; border-radius: 20px; font-size: 0.65em; font-weight: 600; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-unlocked { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid rgba(0,229,255,0.06); }
-        .badge-locked { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.06); }
-        
-        @media (max-width: 768px) {
-            .main { padding: 20px 15px; }
-            .title-section h1 { font-size: 2em; }
-            .glass { padding: 20px; }
-            .input-group input { min-width: 100px; font-size: 0.9em; }
-            .btn { font-size: 0.85em; padding: 10px 16px; min-height: 40px; }
-            .result-box { padding: 20px; }
-            .server-status-bar { gap: 8px; }
-            .server-status-bar .status-item { font-size: 0.7em; padding: 4px 12px; }
-            .social-links .btn { font-size: 0.8em; padding: 8px 14px; }
-            .tabs { gap: 6px; }
-            .tab-btn { padding: 8px 14px; font-size: 0.75em; }
+        .modal .row:last-child { border-bottom: none; }
+        .modal .row .label { color: var(--text-secondary); }
+        .modal .row .value { color: var(--text-primary); font-weight: 500; }
+        .modal .row .value.green { color: var(--accent-green); }
+        .modal .row .value.red { color: #F87171; }
+        .modal .close-btn {
+            width: 100%;
+            margin-top: 16px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
         }
+        .modal .close-btn:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: var(--border-active);
+            color: var(--text-primary);
+        }
+        
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .container { padding: 14px 16px; }
+            .header .logo { font-size: 2em; letter-spacing: 4px; }
+            .header .subtitle { font-size: 0.65em; letter-spacing: 6px; }
+            .card { padding: 20px; }
+            .status-bar { gap: 12px; padding: 12px 16px; }
+            .status-item { font-size: 0.72em; }
+            .status-divider { display: none; }
+            .tabs { gap: 2px; padding: 3px; }
+            .tab-btn { padding: 10px 12px; font-size: 0.7em; min-width: 60px; }
+            .tab-btn span { display: none; }
+            .tab-btn i { font-size: 1.1em; }
+            .input-group .field { min-width: 120px; }
+            .input-group input, .input-group select { padding: 11px 14px 11px 36px; font-size: 0.85em; }
+            .btn { padding: 11px 18px; font-size: 0.8em; min-height: 42px; }
+            .status-grid { grid-template-columns: 1fr; }
+            .modal { padding: 24px; }
+            .social-links .btn { padding: 8px 16px; font-size: 0.72em; min-height: 36px; }
+            .locked-state .unlock-form input { min-width: 140px; }
+        }
+        
         @media (max-width: 480px) {
-            .title-section h1 { font-size: 1.5em; }
-            .title-section .sub-title { font-size: 0.6em; letter-spacing: 4px; }
+            .container { padding: 10px 12px; }
+            .header .logo { font-size: 1.6em; letter-spacing: 3px; }
+            .header { padding: 20px 0 12px; }
+            .card { padding: 16px; border-radius: 12px; }
             .input-group { flex-direction: column; }
-            .input-group input, .input-group select { width: 100%; }
+            .input-group .field { width: 100%; min-width: auto; }
             .btn { width: 100%; justify-content: center; }
-            .tab-btn { flex: 1; justify-content: center; }
+            .status-bar { flex-wrap: wrap; gap: 8px; justify-content: center; }
+            .tab-btn { padding: 8px 10px; font-size: 0.65em; min-width: 50px; }
+            .modal { padding: 18px; }
+            .social-links { gap: 8px; }
+            .social-links .btn { padding: 8px 14px; font-size: 0.7em; }
         }
     </style>
 </head>
 <body>
-    <div class="main">
-        <div class="title-section">
-            <h1>HEX CHEATS</h1>
-            <div class="sub-title">Like Bot System</div>
+
+<div class="container">
+    <!-- ===== HEADER ===== -->
+    <header class="header animate-in">
+        <h1 class="logo">HEX CHEATS</h1>
+        <p class="subtitle">Like Bot System</p>
+    </header>
+
+    <!-- ===== STATUS BAR ===== -->
+    <div class="status-bar animate-in animate-in-delay-1">
+        <div class="status-item">
+            <i class="fas fa-server"></i>
+            Server: <span class="value" id="pub-server">IND</span>
         </div>
-        
-        <div class="server-status-bar">
-            <div class="status-item"><i class="fas fa-server"></i> Server: <span style="color:#00E5FF;font-weight:600;" id="pub-server">IND</span></div>
-            <div class="status-item"><i class="fas fa-users"></i> Accounts: <span class="count" id="pub-accounts">0</span></div>
-            <div class="status-item"><i class="fas fa-heart"></i> Auto-Like: <span id="auto-status-badge" class="badge badge-locked">Locked</span></div>
+        <div class="status-divider"></div>
+        <div class="status-item">
+            <i class="fas fa-users"></i>
+            Accounts: <span class="value green" id="pub-accounts">0</span>
         </div>
-        
-        <div class="tabs">
-            <button class="tab-btn active-tab" onclick="switchTab('send-tab')"><i class="fas fa-paper-plane"></i> Send</button>
-            <button class="tab-btn" onclick="switchTab('verify-tab')"><i class="fas fa-check-double"></i> Verify</button>
-            <button class="tab-btn" onclick="switchTab('auto-tab')"><i class="fas fa-clock"></i> Auto-Like</button>
-            <button class="tab-btn" onclick="switchTab('history-tab')"><i class="fas fa-history"></i> History</button>
-            <button class="tab-btn" onclick="switchTab('status-tab')"><i class="fas fa-chart-bar"></i> Status</button>
-        </div>
-        
-        <!-- Send Tab -->
-        <div id="send-tab" class="tab-content active-tab">
-            <div class="glass">
-                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                    <i class="fas fa-rocket" style="color:#00E5FF;"></i> Send Likes
-                </h2>
-                <div class="input-group">
-                    <input type="number" id="target-uid" placeholder="Enter Target UID" />
-                    <select id="server-select" onchange="updateServerStatus(this.value)">
-                        <option value="IND">India</option>
-                        <option value="BD">Bangladesh</option>
-                        <option value="MENA">MENA</option>
-                        <option value="BR">Brazil</option>
-                        <option value="US">US</option>
-                        <option value="SAC">SAC</option>
-                        <option value="NA">NA</option>
-                        <option value="RU">Russia</option>
-                    </select>
-                    <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-paper-plane"></i> Send</button>
-                </div>
-                <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
-            </div>
-        </div>
-        
-        <!-- Verify Tab -->
-        <div id="verify-tab" class="tab-content">
-            <div class="glass">
-                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                    <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
-                </h2>
-                <div class="input-group">
-                    <input type="number" id="verify-uid" placeholder="Enter UID" />
-                    <select id="verify-server" onchange="updateServerStatus(this.value)">
-                        <option value="IND">India</option>
-                        <option value="BD">Bangladesh</option>
-                        <option value="MENA">MENA</option>
-                        <option value="BR">Brazil</option>
-                        <option value="US">US</option>
-                        <option value="SAC">SAC</option>
-                        <option value="NA">NA</option>
-                        <option value="RU">Russia</option>
-                    </select>
-                    <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
-                </div>
-                <div id="verify-result"></div>
-            </div>
-        </div>
-        
-        <!-- Auto-Like Tab -->
-        <div id="auto-tab" class="tab-content">
-            <div class="glass" id="auto-glass">
-                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                    <i class="fas fa-clock" style="color:#FFC107;"></i> Auto Like
-                    <span id="auto-status-label" style="color:#FFC107; font-size:0.7em;">Locked</span>
-                </h2>
-                
-                <div id="auto-unlocked-content" style="display:none;">
-                    <div class="input-group">
-                        <input type="number" id="auto-target-uid" placeholder="Enter Target UID for Auto-Like" />
-                        <button class="btn btn-success" onclick="addAutoTarget()"><i class="fas fa-plus"></i> Add Target</button>
-                    </div>
-                    <div id="auto-targets-list" style="margin-top:12px;"></div>
-                    <div class="note"><i class="fas fa-info-circle"></i> Targets added here will receive auto-likes daily at <span id="auto-time-display">04:00</span> IST.</div>
-                </div>
-                
-                <div id="auto-locked-content">
-                    <div style="text-align:center; padding:20px 0;">
-                        <i class="fas fa-lock" style="font-size:3em; color:#FFC107; opacity:0.5;"></i>
-                        <p style="color:#A8B3CF; margin-top:10px;">Auto-Like feature is locked.</p>
-                        <div class="input-group" style="justify-content:center; margin-top:15px;">
-                            <input type="text" id="unlock-code" placeholder="Enter Unlock Code" style="max-width:250px;" />
-                            <button class="btn btn-unlock" onclick="unlockAutoLike()"><i class="fas fa-key"></i> Unlock</button>
-                        </div>
-                        <div id="unlock-message" style="margin-top:10px;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- History Tab -->
-        <div id="history-tab" class="tab-content">
-            <div class="glass">
-                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                    <i class="fas fa-history" style="color:#00E5FF;"></i> Like History
-                </h2>
-                <div id="history-list">
-                    <div class="note">Loading history...</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Status Tab -->
-        <div id="status-tab" class="tab-content">
-            <div class="glass">
-                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                    <i class="fas fa-chart-bar" style="color:#00E5FF;"></i> System Status
-                </h2>
-                <div id="status-content">
-                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                        <span style="color:#A8B3CF;">Server</span>
-                        <span style="color:#00E5FF;font-weight:600;" id="status-server">IND</span>
-                    </div>
-                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                        <span style="color:#A8B3CF;">Accounts Available</span>
-                        <span style="color:#00E676;font-weight:600;" id="status-accounts">0</span>
-                    </div>
-                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                        <span style="color:#A8B3CF;">Auto-Like Status</span>
-                        <span style="font-weight:600;" id="status-auto">Locked</span>
-                    </div>
-                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
-                        <span style="color:#A8B3CF;">Auto-Like Time</span>
-                        <span style="color:#FFC107;font-weight:600;" id="status-auto-time">04:00 IST</span>
-                    </div>
-                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;">
-                        <span style="color:#A8B3CF;">Total Likes Sent</span>
-                        <span style="color:#00E676;font-weight:600;" id="status-total-likes">0</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="social-links">
-            <a href="https://t.me/+dP7xLb3AoE1jNmRl" target="_blank">
-                <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Join Telegram</button>
-            </a>
-            <a href="https://t.me/HeX_CiPhEr" target="_blank">
-                <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Contact</button>
-            </a>
-            <a href="https://youtube.com/@define_hex?si=EJ86nAHxM29GfMqh" target="_blank">
-                <button class="btn btn-youtube"><i class="fab fa-youtube"></i> YouTube</button>
-            </a>
-        </div>
-        
-        <div class="footer-contact">
-            <h3><i class="fas fa-headset"></i> Need Help?</h3>
-            <p>Contact us on <a href="https://t.me/HeX_CiPhEr" target="_blank">Telegram</a> for support or to get an unlock code.</p>
-        </div>
-    </div>
-    
-    <div class="result-modal" id="resultModal">
-        <div class="result-box">
-            <h2><i class="fas fa-check-circle"></i> Like Result</h2>
-            <div id="result-content">
-                <div class="row"><span class="label">Player Name</span><span class="value" id="res-name">-</span></div>
-                <div class="row"><span class="label">Likes Sent</span><span class="value" id="res-sent">0</span></div>
-                <div class="row"><span class="label">Likes Before</span><span class="value" id="res-before">0</span></div>
-                <div class="row"><span class="label">Likes After</span><span class="value" id="res-after">0</span></div>
-                <div class="row"><span class="label">Verified Added</span><span class="value" id="res-added">0</span></div>
-                <div class="row"><span class="label">Failed</span><span class="value value-failed" id="res-failed">0</span></div>
-            </div>
-            <button class="close-btn" onclick="closeResult()"><i class="fas fa-times"></i> Close</button>
+        <div class="status-divider"></div>
+        <div class="status-item">
+            <i class="fas fa-bolt"></i>
+            Auto-Like: <span class="value gold" id="auto-status-badge">Locked</span>
         </div>
     </div>
 
-    <script>
-        let currentServer = 'IND';
-        let isAutoUnlocked = false;
-        let autoTime = '04:00';
-        
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active-tab'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
-            document.getElementById(tabId).classList.add('active-tab');
-            document.querySelector(`.tab-btn[onclick*="${tabId}"]`).classList.add('active-tab');
-            if (tabId === 'history-tab') loadHistory();
-            if (tabId === 'status-tab') loadStatus();
-        }
-        
-        function updateServerStatus(server) {
-            currentServer = server;
-            document.getElementById('pub-server').textContent = server;
-            document.querySelectorAll('#server-select, #verify-server').forEach(el => el.value = server);
-            if (document.getElementById('status-server')) {
-                document.getElementById('status-server').textContent = server;
-            }
-            loadPublicData();
-        }
-        
-        function formatTime(iso) {
-            if (!iso) return 'Never';
-            try { const d = new Date(iso); return d.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return iso; }
-        }
-        
-        function loadPublicData() {
-            fetch('/api/public-data?server=' + currentServer)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.error) return;
-                    document.getElementById('pub-accounts').textContent = data.total_accounts || 0;
-                    if (document.getElementById('status-accounts')) {
-                        document.getElementById('status-accounts').textContent = data.total_accounts || 0;
-                    }
-                });
-        }
-        
-        function loadAutoTargets() {
-            if (!isAutoUnlocked) return;
-            fetch('/api/auto-targets')
-                .then(res => res.json())
-                .then(data => {
-                    let html = '';
-                    if (data.targets && data.targets.length > 0) {
-                        data.targets.forEach(target => {
-                            html += `<div class="user-item"><span class="uid">${target}</span><button class="del-btn" onclick="removeAutoTarget('${target}')"><i class="fas fa-times"></i></button></div>`;
-                        });
-                    } else {
-                        html = '<div class="note">No targets added yet</div>';
-                    }
-                    document.getElementById('auto-targets-list').innerHTML = html;
-                });
-        }
-        
-        function loadHistory() {
-            fetch('/api/public-history')
-                .then(res => res.json())
-                .then(data => {
-                    let html = '';
-                    if (data.history && data.history.length > 0) {
-                        data.history.slice().reverse().forEach(h => {
-                            html += `<div class="history-item">
-                                <span><span class="uid">${h.uid}</span> <span class="name">${h.username || 'Unknown'}</span></span>
-                                <span class="likes">+${h.likes_sent}</span>
-                                <span class="time">${formatTime(h.timestamp)}</span>
-                            </div>`;
-                        });
-                    } else {
-                        html = '<div class="note">No history yet</div>';
-                    }
-                    document.getElementById('history-list').innerHTML = html;
-                });
-        }
-        
-        function loadStatus() {
-            fetch('/api/public-status')
-                .then(res => res.json())
-                .then(data => {
-                    document.getElementById('status-accounts').textContent = data.total_accounts || 0;
-                    document.getElementById('status-auto').textContent = data.auto_unlocked ? 'Unlocked' : 'Locked';
-                    document.getElementById('status-auto').style.color = data.auto_unlocked ? '#00E676' : '#FFC107';
-                    document.getElementById('status-auto-time').textContent = data.auto_time || '04:00 IST';
-                    document.getElementById('status-total-likes').textContent = data.total_likes_sent || 0;
-                });
-        }
-        
-        function showResult(data) {
-            document.getElementById('res-name').textContent = data.username || 'Unknown';
-            document.getElementById('res-sent').textContent = data.likes_sent || 0;
-            document.getElementById('res-before').textContent = data.likes_before || 0;
-            document.getElementById('res-after').textContent = data.total_likes || 0;
-            document.getElementById('res-added').textContent = data.verified_added || 0;
-            document.getElementById('res-failed').textContent = data.failed || 0;
-            document.getElementById('resultModal').classList.add('active');
-        }
-        
-        function closeResult() { document.getElementById('resultModal').classList.remove('active'); }
-        document.getElementById('resultModal').addEventListener('click', function(e) { if (e.target === this) closeResult(); });
-        
-        function sendLikes() {
-            const uid = document.getElementById('target-uid').value.trim();
-            const server = document.getElementById('server-select').value;
-            if (!uid) { alert('Enter a target UID'); return; }
-            if (!confirm('Send likes to ' + uid + ' on ' + server + '?')) return;
+    <!-- ===== TABS ===== -->
+    <nav class="tabs animate-in animate-in-delay-2" role="tablist">
+        <button class="tab-btn active" data-tab="send" role="tab">
+            <i class="fas fa-paper-plane"></i>
+            <span>Send</span>
+        </button>
+        <button class="tab-btn" data-tab="verify" role="tab">
+            <i class="fas fa-check-double"></i>
+            <span>Verify</span>
+        </button>
+        <button class="tab-btn" data-tab="auto" role="tab">
+            <i class="fas fa-clock"></i>
+            <span>Auto-Like</span>
+        </button>
+        <button class="tab-btn" data-tab="history" role="tab">
+            <i class="fas fa-history"></i>
+            <span>History</span>
+        </button>
+        <button class="tab-btn" data-tab="status" role="tab">
+            <i class="fas fa-chart-bar"></i>
+            <span>Status</span>
+        </button>
+    </nav>
+
+    <!-- ===== SEND TAB ===== -->
+    <section id="tab-send" class="tab-content active">
+        <div class="card animate-in animate-in-delay-3">
+            <div class="card-title">
+                <i class="fas fa-rocket"></i> Send Likes
+            </div>
+            <div class="input-group">
+                <div class="field">
+                    <i class="fas fa-id-badge"></i>
+                    <input type="number" id="target-uid" placeholder="Enter Target UID" />
+                </div>
+                <div class="field" style="min-width:130px; flex:0.6;">
+                    <i class="fas fa-globe"></i>
+                    <select id="server-select" onchange="updateServer(this.value)">
+                        <option value="IND">India</option>
+                        <option value="BD">Bangladesh</option>
+                        <option value="MENA">MENA</option>
+                        <option value="BR">Brazil</option>
+                        <option value="US">US</option>
+                        <option value="SAC">SAC</option>
+                        <option value="NA">NA</option>
+                        <option value="RU">Russia</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="sendLikes()">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+            </div>
+            <div class="note">
+                <i class="fas fa-info-circle"></i> Sends all likes from available accounts to the target UID.
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== VERIFY TAB ===== -->
+    <section id="tab-verify" class="tab-content">
+        <div class="card animate-in">
+            <div class="card-title">
+                <i class="fas fa-check-double"></i> Verify Profile
+            </div>
+            <div class="input-group">
+                <div class="field">
+                    <i class="fas fa-id-badge"></i>
+                    <input type="number" id="verify-uid" placeholder="Enter UID" />
+                </div>
+                <div class="field" style="min-width:130px; flex:0.6;">
+                    <i class="fas fa-globe"></i>
+                    <select id="verify-server" onchange="updateServer(this.value)">
+                        <option value="IND">India</option>
+                        <option value="BD">Bangladesh</option>
+                        <option value="MENA">MENA</option>
+                        <option value="BR">Brazil</option>
+                        <option value="US">US</option>
+                        <option value="SAC">SAC</option>
+                        <option value="NA">NA</option>
+                        <option value="RU">Russia</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="verifyProfile()">
+                    <i class="fas fa-search"></i> Verify
+                </button>
+            </div>
+            <div id="verify-result"></div>
+        </div>
+    </section>
+
+    <!-- ===== AUTO-LIKE TAB ===== -->
+    <section id="tab-auto" class="tab-content">
+        <div class="card animate-in">
+            <div class="card-title">
+                <i class="fas fa-clock"></i> Auto-Like
+                <span id="auto-status-label" style="font-size:0.7em; color:var(--accent-gold); font-weight:400; text-transform:none; letter-spacing:0;">
+                    Locked
+                </span>
+            </div>
             
-            const btn = document.querySelector('#send-tab .btn-rocket');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-            btn.disabled = true;
-            
-            fetch('/api/public-send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid, server_name: server })
-            })
-            .then(res => res.json())
-            .then(data => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                if (data.success) {
-                    showResult(data);
-                    loadHistory();
-                    loadStatus();
-                } else {
-                    alert('Error: ' + (data.error || 'Unknown error'));
-                }
-            });
-        }
-        
-        function verifyProfile() {
-            const uid = document.getElementById('verify-uid').value.trim();
-            const server = document.getElementById('verify-server').value;
-            if (!uid) { alert('Enter a UID'); return; }
-            
-            const btn = document.querySelector('#verify-tab .btn-rocket');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-            btn.disabled = true;
-            
-            fetch('/api/public-verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid, server_name: server })
-            })
-            .then(res => res.json())
-            .then(data => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                if (data.error) {
-                    document.getElementById('verify-result').innerHTML = '<div style="color:#FF4D6D;">' + data.error + '</div>';
-                    return;
-                }
-                document.getElementById('verify-result').innerHTML = `
-                    <div class="verify-result-box">
-                        <div class="uid-display">UID: ${data.uid}</div>
-                        <div class="name-display">Name: ${data.username}</div>
-                        <div class="row-display">
-                            <span>Total Likes</span>
-                            <span class="likes-display">${data.likes}</span>
-                        </div>
+            <div id="auto-unlocked" style="display:none;">
+                <div class="input-group">
+                    <div class="field">
+                        <i class="fas fa-plus-circle"></i>
+                        <input type="number" id="auto-target-uid" placeholder="Add Target UID" />
                     </div>
-                `;
-            });
-        }
-        
-        function unlockAutoLike() {
-            const code = document.getElementById('unlock-code').value.trim();
-            if (!code) { alert('Enter an unlock code'); return; }
+                    <button class="btn btn-success" onclick="addAutoTarget()">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+                <div id="auto-targets-list" class="target-list"></div>
+                <div class="note" style="margin-top:12px;">
+                    <i class="fas fa-info-circle"></i> Targets receive auto-likes daily at <span id="auto-time-display">04:00</span> IST.
+                </div>
+            </div>
             
-            fetch('/api/unlock-auto', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
-            })
+            <div id="auto-locked">
+                <div class="locked-state">
+                    <div class="icon"><i class="fas fa-lock"></i></div>
+                    <p>Auto-Like feature requires an unlock code.</p>
+                    <div class="unlock-form">
+                        <input type="text" id="unlock-code" placeholder="Enter unlock code" />
+                        <button class="btn btn-gold" onclick="unlockAutoLike()">
+                            <i class="fas fa-key"></i> Unlock
+                        </button>
+                    </div>
+                    <div id="unlock-message" style="margin-top:10px; font-size:0.85em;"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== HISTORY TAB ===== -->
+    <section id="tab-history" class="tab-content">
+        <div class="card animate-in">
+            <div class="card-title">
+                <i class="fas fa-history"></i> Like History
+            </div>
+            <div id="history-list">
+                <div style="color:var(--text-muted); font-size:0.85em; text-align:center; padding:16px 0;">
+                    <i class="fas fa-spinner fa-pulse"></i> Loading...
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== STATUS TAB ===== -->
+    <section id="tab-status" class="tab-content">
+        <div class="card animate-in">
+            <div class="card-title">
+                <i class="fas fa-chart-bar"></i> System Status
+            </div>
+            <div class="status-grid">
+                <div class="stat">
+                    <div class="label">Server</div>
+                    <div class="value" id="status-server" style="color:var(--accent-cyan);">IND</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Available Accounts</div>
+                    <div class="value" id="status-accounts" style="color:var(--accent-green);">0</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Auto-Like Status</div>
+                    <div class="value" id="status-auto" style="color:var(--accent-gold);">Locked</div>
+                </div>
+                <div class="stat">
+                    <div class="label">Auto-Like Time</div>
+                    <div class="value" id="status-auto-time" style="color:var(--accent-gold);">04:00 IST</div>
+                </div>
+                <div class="stat" style="grid-column: 1 / -1;">
+                    <div class="label">Total Likes Sent</div>
+                    <div class="value" id="status-total-likes" style="color:var(--accent-green); font-size:1.3em;">0</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== SOCIAL LINKS ===== -->
+    <div class="social-links animate-in animate-in-delay-4">
+        <a href="https://t.me/+dP7xLb3AoE1jNmRl" target="_blank">
+            <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Join Telegram</button>
+        </a>
+        <a href="https://t.me/HeX_CiPhEr" target="_blank">
+            <button class="btn btn-telegram"><i class="fab fa-telegram"></i> Contact</button>
+        </a>
+        <a href="https://youtube.com/@define_hex?si=EJ86nAHxM29GfMqh" target="_blank">
+            <button class="btn btn-youtube"><i class="fab fa-youtube"></i> YouTube</button>
+        </a>
+    </div>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer-help animate-in animate-in-delay-5">
+        <h3><i class="fas fa-headset" style="color:var(--accent-cyan);"></i> Need Help?</h3>
+        <p>Contact us on <a href="https://t.me/HeX_CiPhEr" target="_blank">Telegram</a> for support or to get an unlock code.</p>
+    </footer>
+</div>
+
+<!-- ===== RESULT MODAL ===== -->
+<div class="modal-overlay" id="resultModal">
+    <div class="modal">
+        <h2><i class="fas fa-check-circle"></i> Like Result</h2>
+        <div id="result-content">
+            <div class="row"><span class="label">Player Name</span><span class="value" id="res-name">-</span></div>
+            <div class="row"><span class="label">Likes Sent</span><span class="value green" id="res-sent">0</span></div>
+            <div class="row"><span class="label">Likes Before</span><span class="value" id="res-before">0</span></div>
+            <div class="row"><span class="label">Likes After</span><span class="value green" id="res-after">0</span></div>
+            <div class="row"><span class="label">Verified Added</span><span class="value green" id="res-added">0</span></div>
+            <div class="row"><span class="label">Failed</span><span class="value red" id="res-failed">0</span></div>
+        </div>
+        <button class="close-btn" onclick="closeModal()"><i class="fas fa-times"></i> Close</button>
+    </div>
+</div>
+
+<script>
+    // ===== STATE =====
+    let currentServer = 'IND';
+    let isAutoUnlocked = false;
+    let autoTime = '04:00';
+    
+    // ===== TABS =====
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+            if (this.dataset.tab === 'history') loadHistory();
+            if (this.dataset.tab === 'status') loadStatus();
+        });
+    });
+    
+    // ===== SERVER =====
+    function updateServer(server) {
+        currentServer = server;
+        document.getElementById('pub-server').textContent = server;
+        document.querySelectorAll('#server-select, #verify-server').forEach(el => el.value = server);
+        document.getElementById('status-server').textContent = server;
+        loadPublicData();
+    }
+    
+    // ===== FORMAT TIME =====
+    function formatTime(iso) {
+        if (!iso) return 'Never';
+        try {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        } catch { return iso; }
+    }
+    
+    // ===== LOAD PUBLIC DATA =====
+    function loadPublicData() {
+        fetch('/api/public-data?server=' + currentServer)
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    document.getElementById('unlock-message').innerHTML = '<div style="color:#00E676;">' + data.message + '</div>';
-                    setTimeout(() => location.reload(), 1500);
+                if (data.error) return;
+                document.getElementById('pub-accounts').textContent = data.total_accounts || 0;
+                document.getElementById('status-accounts').textContent = data.total_accounts || 0;
+            });
+    }
+    
+    // ===== LOAD AUTO TARGETS =====
+    function loadAutoTargets() {
+        if (!isAutoUnlocked) return;
+        fetch('/api/auto-targets')
+            .then(res => res.json())
+            .then(data => {
+                const container = document.getElementById('auto-targets-list');
+                if (data.targets && data.targets.length > 0) {
+                    container.innerHTML = data.targets.map(t => `
+                        <div class="target-item">
+                            <span class="uid">${t}</span>
+                            <button class="remove" onclick="removeAutoTarget('${t}')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `).join('');
                 } else {
-                    document.getElementById('unlock-message').innerHTML = '<div style="color:#FF4D6D;">' + data.message + '</div>';
+                    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.8em; padding:4px 0;">No targets added yet</div>';
                 }
             });
-        }
-        
-        function addAutoTarget() {
-            const uid = document.getElementById('auto-target-uid').value.trim();
-            if (!uid) { alert('Enter a target UID'); return; }
-            
-            fetch('/api/add-auto-target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid })
-            })
+    }
+    
+    // ===== LOAD HISTORY =====
+    function loadHistory() {
+        fetch('/api/public-history')
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
-                    document.getElementById('auto-target-uid').value = '';
+                const container = document.getElementById('history-list');
+                if (data.history && data.history.length > 0) {
+                    container.innerHTML = data.history.slice().reverse().map(h => `
+                        <div class="history-item">
+                            <span>
+                                <span class="uid">${h.uid}</span>
+                                <span class="name">${h.username || 'Unknown'}</span>
+                            </span>
+                            <span class="likes">+${h.likes_sent}</span>
+                            <span class="time">${formatTime(h.timestamp)}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.85em; text-align:center; padding:12px 0;">No history yet</div>';
+                }
+            });
+    }
+    
+    // ===== LOAD STATUS =====
+    function loadStatus() {
+        fetch('/api/public-status')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('status-accounts').textContent = data.total_accounts || 0;
+                const autoStatus = data.auto_unlocked ? 'Unlocked' : 'Locked';
+                document.getElementById('status-auto').textContent = autoStatus;
+                document.getElementById('status-auto').style.color = data.auto_unlocked ? 'var(--accent-green)' : 'var(--accent-gold)';
+                document.getElementById('status-auto-time').textContent = data.auto_time || '04:00 IST';
+                document.getElementById('status-total-likes').textContent = data.total_likes_sent || 0;
+            });
+    }
+    
+    // ===== MODAL =====
+    function showModal(data) {
+        document.getElementById('res-name').textContent = data.username || 'Unknown';
+        document.getElementById('res-sent').textContent = data.likes_sent || 0;
+        document.getElementById('res-before').textContent = data.likes_before || 0;
+        document.getElementById('res-after').textContent = data.total_likes || 0;
+        document.getElementById('res-added').textContent = data.verified_added || 0;
+        document.getElementById('res-failed').textContent = data.failed || 0;
+        document.getElementById('resultModal').classList.add('active');
+    }
+    
+    function closeModal() {
+        document.getElementById('resultModal').classList.remove('active');
+    }
+    document.getElementById('resultModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+    
+    // ===== SEND LIKES =====
+    function sendLikes() {
+        const uid = document.getElementById('target-uid').value.trim();
+        const server = document.getElementById('server-select').value;
+        if (!uid) { alert('Enter a target UID'); return; }
+        if (!confirm('Send likes to ' + uid + ' on ' + server + '?')) return;
+        
+        const btn = document.querySelector('#tab-send .btn-primary');
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        btn.disabled = true;
+        
+        fetch('/api/public-send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid, server_name: server })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+            if (data.success) {
+                showModal(data);
+                loadHistory();
+                loadStatus();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+            alert('Network error. Please try again.');
+        });
+    }
+    
+    // ===== VERIFY PROFILE =====
+    function verifyProfile() {
+        const uid = document.getElementById('verify-uid').value.trim();
+        const server = document.getElementById('verify-server').value;
+        if (!uid) { alert('Enter a UID'); return; }
+        
+        const btn = document.querySelector('#tab-verify .btn-primary');
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+        btn.disabled = true;
+        
+        fetch('/api/public-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid, server_name: server })
+        })
+        .then(res => res.json())
+        .then(data => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+            const result = document.getElementById('verify-result');
+            if (data.error) {
+                result.innerHTML = '<div style="color:#F87171; padding:10px 0;">' + data.error + '</div>';
+                return;
+            }
+            result.innerHTML = `
+                <div class="verify-result">
+                    <div class="row"><span class="label">UID</span><span class="value highlight">${data.uid}</span></div>
+                    <div class="row"><span class="label">Name</span><span class="value">${data.username}</span></div>
+                    <div class="row"><span class="label">Total Likes</span><span class="value green">${data.likes}</span></div>
+                </div>
+            `;
+        })
+        .catch(() => {
+            btn.innerHTML = original;
+            btn.disabled = false;
+            alert('Network error. Please try again.');
+        });
+    }
+    
+    // ===== UNLOCK AUTO-LIKE =====
+    function unlockAutoLike() {
+        const code = document.getElementById('unlock-code').value.trim().toUpperCase();
+        if (!code) { alert('Enter an unlock code'); return; }
+        
+        fetch('/api/unlock-auto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        })
+        .then(res => res.json())
+        .then(data => {
+            const msg = document.getElementById('unlock-message');
+            if (data.success) {
+                msg.innerHTML = '<div style="color:var(--accent-green);">' + data.message + '</div>';
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                msg.innerHTML = '<div style="color:#F87171;">' + data.message + '</div>';
+            }
+        });
+    }
+    
+    // ===== ADD AUTO TARGET =====
+    function addAutoTarget() {
+        const uid = document.getElementById('auto-target-uid').value.trim();
+        if (!uid) { alert('Enter a target UID'); return; }
+        
+        fetch('/api/add-auto-target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('auto-target-uid').value = '';
+                loadAutoTargets();
+            } else {
+                alert(data.message);
+            }
+        });
+    }
+    
+    // ===== REMOVE AUTO TARGET =====
+    function removeAutoTarget(uid) {
+        if (!confirm('Remove ' + uid + ' from auto-like targets?')) return;
+        fetch('/api/remove-auto-target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) loadAutoTargets();
+            else alert(data.message);
+        });
+    }
+    
+    // ===== CHECK AUTO STATUS =====
+    function checkAutoStatus() {
+        fetch('/api/check-auto-status')
+            .then(res => res.json())
+            .then(data => {
+                isAutoUnlocked = data.unlocked;
+                const badge = document.getElementById('auto-status-badge');
+                const label = document.getElementById('auto-status-label');
+                const locked = document.getElementById('auto-locked');
+                const unlocked = document.getElementById('auto-unlocked');
+                
+                if (isAutoUnlocked) {
+                    badge.textContent = 'Unlocked';
+                    badge.style.color = 'var(--accent-green)';
+                    label.textContent = 'Unlocked';
+                    label.style.color = 'var(--accent-green)';
+                    locked.style.display = 'none';
+                    unlocked.style.display = 'block';
+                    document.getElementById('auto-time-display').textContent = data.auto_time || '04:00';
                     loadAutoTargets();
                 } else {
-                    alert(data.message);
+                    badge.textContent = 'Locked';
+                    badge.style.color = 'var(--accent-gold)';
+                    label.textContent = 'Locked';
+                    label.style.color = 'var(--accent-gold)';
+                    locked.style.display = 'block';
+                    unlocked.style.display = 'none';
                 }
+                if (data.auto_time) autoTime = data.auto_time;
             });
+    }
+    
+    // ===== KEYBOARD SHORTCUTS =====
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Enter') {
+            const active = document.querySelector('.tab-content.active');
+            if (active) {
+                if (active.id === 'tab-send') sendLikes();
+                else if (active.id === 'tab-verify') verifyProfile();
+                else if (active.id === 'tab-auto' && !isAutoUnlocked) unlockAutoLike();
+            }
         }
-        
-        function removeAutoTarget(uid) {
-            if (!confirm('Remove ' + uid + ' from auto-like targets?')) return;
-            fetch('/api/remove-auto-target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) loadAutoTargets();
-                else alert(data.message);
-            });
-        }
-        
-        function checkAutoStatus() {
-            fetch('/api/check-auto-status')
-                .then(res => res.json())
-                .then(data => {
-                    isAutoUnlocked = data.unlocked;
-                    const badge = document.getElementById('auto-status-badge');
-                    const label = document.getElementById('auto-status-label');
-                    const lockedContent = document.getElementById('auto-locked-content');
-                    const unlockedContent = document.getElementById('auto-unlocked-content');
-                    
-                    if (isAutoUnlocked) {
-                        badge.className = 'badge badge-unlocked';
-                        badge.textContent = 'Unlocked';
-                        label.textContent = 'Unlocked';
-                        label.style.color = '#00E676';
-                        lockedContent.style.display = 'none';
-                        unlockedContent.style.display = 'block';
-                        document.getElementById('auto-time-display').textContent = data.auto_time || '04:00';
-                        loadAutoTargets();
-                    } else {
-                        badge.className = 'badge badge-locked';
-                        badge.textContent = 'Locked';
-                        label.textContent = 'Locked';
-                        label.style.color = '#FFC107';
-                        lockedContent.style.display = 'block';
-                        unlockedContent.style.display = 'none';
-                    }
-                    
-                    if (data.auto_time) {
-                        autoTime = data.auto_time;
-                    }
-                });
-        }
-        
-        loadPublicData();
-        checkAutoStatus();
-        setInterval(loadPublicData, 10000);
-        setInterval(checkAutoStatus, 30000);
-    </script>
+    });
+    
+    // ===== INIT =====
+    loadPublicData();
+    checkAutoStatus();
+    loadHistory();
+    loadStatus();
+    setInterval(loadPublicData, 15000);
+    setInterval(checkAutoStatus, 30000);
+    setInterval(loadHistory, 20000);
+</script>
 </body>
 </html>
 '''
 
+# ============================================================
+# ROUTES
+# ============================================================
 @public_bp.route('/')
 def index():
-    return render_template_string(PUBLIC_HTML)
+    return PUBLIC_HTML
 
 @public_bp.route('/api/public-data')
 def public_data():
