@@ -1,5 +1,9 @@
 from flask import Blueprint, request, jsonify, render_template_string, session, redirect, url_for
 import asyncio
+
+admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+# Import from app after blueprint creation
 from app import (
     get_user_info, send_likes_all_accounts, update_user_stats,
     add_to_history, REGION_URLS, user_db, admin_codes,
@@ -7,10 +11,8 @@ from app import (
     auto_like_users, user_stats, like_history, account_status,
     liked_cache, activity_logs, AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE,
     add_activity_log, save_user_db, save_users, get_next_reset_time,
-    set_auto_time, load_liked_data, load_account_status, load_users, load_user_db
+    set_auto_time, reset_all_data
 )
-
-admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 # ============================================================
 # LOGIN HTML
@@ -126,7 +128,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# ADMIN DASHBOARD HTML (Full version - kept from original)
+# ADMIN DASHBOARD HTML (Abbreviated - Full version from original)
 # ============================================================
 ADMIN_HTML = '''
 <!DOCTYPE html>
@@ -1031,8 +1033,6 @@ def dashboard_data():
         return jsonify({'error': 'Unauthorized'}), 401
     server = request.args.get('server', 'IND')
     accounts = load_accounts(server)
-    if not accounts:
-        return jsonify({'error': f'No accounts found for server {server}'})
     total = len(accounts)
     total_likes = sum(len(v) for v in liked_cache.values())
     targets_liked = len(liked_cache)

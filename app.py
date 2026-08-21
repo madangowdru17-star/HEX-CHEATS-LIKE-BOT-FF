@@ -22,6 +22,7 @@ import threading
 import hashlib
 import secrets
 
+# Create Flask app FIRST
 app = Flask(__name__)
 app.secret_key = 'hex-cheats-secret-key-2024'
 
@@ -353,7 +354,8 @@ def load_accounts(server_name):
                     if uid and password and uid.isdigit():
                         accounts.append({"uid": uid, "password": password})
         return accounts
-    except:
+    except Exception as e:
+        print(f"Error loading accounts: {e}")
         return []
 
 async def get_user_info(target_uid, server_name="IND"):
@@ -383,7 +385,8 @@ async def get_user_info(target_uid, server_name="IND"):
             except:
                 return None
         return None
-    except:
+    except Exception as e:
+        print(f"Error getting user info: {e}")
         return None
 
 async def generate_jwt_token(uid, password):
@@ -400,7 +403,8 @@ async def generate_jwt_token(uid, password):
                         elif 'token' in data:
                             return data['token']
                 return None
-    except:
+    except Exception as e:
+        print(f"Error generating JWT: {e}")
         return None
 
 async def get_valid_token(uid, password, server_name="IND"):
@@ -638,15 +642,34 @@ print(f"Active codes: {len(admin_codes)}")
 print(f"Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
 print("Public URL: / (no login)")
 
+# ============================================================
+# REGISTER BLUEPRINTS (After all functions are defined)
+# ============================================================
+try:
+    from public import public_bp
+    from admin import admin_bp
+    
+    app.register_blueprint(public_bp)
+    app.register_blueprint(admin_bp)
+    
+    print("Blueprints registered successfully!")
+except Exception as e:
+    print(f"Error registering blueprints: {e}")
+
+# ============================================================
+# ROOT ROUTE - Direct fallback
+# ============================================================
+@app.route('/')
+def root_index():
+    try:
+        from public import PUBLIC_HTML
+        return PUBLIC_HTML
+    except:
+        return "<h1>HEX CHEATS</h1><p>Public page loading... Please check logs.</p>"
+
+# ============================================================
+# MAIN ENTRY POINT
+# ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
-# ============================================================
-# REGISTER BLUEPRINTS (Moved to bottom to avoid circular imports)
-# ============================================================
-from public import public_bp
-from admin import admin_bp
-
-app.register_blueprint(public_bp)
-app.register_blueprint(admin_bp)
