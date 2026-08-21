@@ -11,7 +11,7 @@ from app import (
 public_bp = Blueprint('public', __name__)
 
 # ============================================================
-# PUBLIC HTML (No emojis, icons only)
+# PUBLIC HTML
 # ============================================================
 PUBLIC_HTML = '''
 <!DOCTYPE html>
@@ -47,6 +47,36 @@ PUBLIC_HTML = '''
         @keyframes titleGlow { 0%,100% { text-shadow: 0 0 20px rgba(0,229,255,0.2), 0 0 40px rgba(0,229,255,0.05); } 50% { text-shadow: 0 0 30px rgba(0,229,255,0.35), 0 0 60px rgba(0,229,255,0.1); } }
         .title-section .sub-title { font-size: 0.9em; color: #A8B3CF; letter-spacing: 8px; text-transform: uppercase; margin-top: 2px; font-weight: 400; }
         
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            background: rgba(22,27,34,0.6);
+            border: 1px solid rgba(43,52,66,0.3);
+            border-radius: 12px;
+            color: #A8B3CF;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85em;
+            transition: 0.3s;
+            font-family: 'Inter', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tab-btn:hover { background: rgba(0,229,255,0.05); color: #00E5FF; }
+        .tab-btn.active-tab {
+            background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,230,118,0.10));
+            color: #00E5FF;
+            border-color: rgba(0,229,255,0.2);
+        }
+        .tab-btn i { font-size: 0.9em; }
+        
         .glass {
             background: rgba(22,27,34,0.85);
             backdrop-filter: blur(12px);
@@ -58,6 +88,10 @@ PUBLIC_HTML = '''
             margin-bottom: 20px;
         }
         .glass:hover { border-color: rgba(0,229,255,0.12); }
+        
+        .tab-content { display: none; }
+        .tab-content.active-tab { display: block; animation: fadeInUp 0.35s ease; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         
         .server-status-bar {
             display: flex;
@@ -131,6 +165,10 @@ PUBLIC_HTML = '''
         .btn-youtube:hover { background: rgba(255,0,0,0.25); }
         .btn-unlock { background: rgba(255,200,0,0.15); color: #FFC107; border: 1px solid rgba(255,200,0,0.2); }
         .btn-unlock:hover { background: rgba(255,200,0,0.25); }
+        .btn-success { background: rgba(0,230,118,0.15); color: #00E676; border: 1px solid rgba(0,230,118,0.2); }
+        .btn-success:hover { background: rgba(0,230,118,0.25); }
+        .btn-danger { background: rgba(255,77,109,0.15); color: #FF4D6D; border: 1px solid rgba(255,77,109,0.2); }
+        .btn-danger:hover { background: rgba(255,77,109,0.25); }
         
         .note { color: #A8B3CF; font-size: 0.85em; margin-top: 12px; text-align: center; }
         
@@ -142,6 +180,21 @@ PUBLIC_HTML = '''
             flex-wrap: wrap;
         }
         .social-links a { text-decoration: none; }
+        
+        .user-item {
+            background: rgba(22,27,34,0.5);
+            padding: 6px 16px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(43,52,66,0.3);
+            margin: 3px;
+            font-size: 0.85em;
+            transition: 0.3s;
+        }
+        .user-item .uid { font-weight: 600; color: #00E5FF; }
+        .user-item .del-btn { background: none; border: none; color: #FF4D6D; cursor: pointer; padding: 0 4px; font-size: 1em; }
         
         .result-modal {
             display: none;
@@ -164,7 +217,6 @@ PUBLIC_HTML = '''
             box-shadow: 0 0 60px rgba(0,229,255,0.03);
             animation: fadeInUp 0.4s ease;
         }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .result-box h2 {
             font-family: 'Orbitron', monospace;
             font-size: 1.1em;
@@ -212,6 +264,37 @@ PUBLIC_HTML = '''
         .footer-contact a { color: #00E5FF; text-decoration: none; }
         .footer-contact a:hover { text-decoration: underline; }
         
+        .verify-result-box {
+            background: rgba(22,27,34,0.5);
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(43,52,66,0.3);
+            margin-top: 12px;
+        }
+        .verify-result-box .uid-display { color: #00E5FF; font-weight: 600; font-size: 1em; }
+        .verify-result-box .name-display { color: #F8FAFC; font-size: 0.9em; }
+        .verify-result-box .likes-display { color: #00E676; font-weight: 600; font-size: 0.9em; }
+        .verify-result-box .row-display { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.85em; color: #A8B3CF; }
+        
+        .history-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(43,52,66,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            font-size: 0.85em;
+        }
+        .history-item .uid { color: #00E5FF; font-weight: 600; }
+        .history-item .name { color: #F8FAFC; }
+        .history-item .likes { color: #00E676; font-weight: 600; }
+        .history-item .time { color: #A8B3CF; font-size: 0.75em; }
+        
+        .badge { padding: 2px 12px; border-radius: 20px; font-size: 0.65em; font-weight: 600; display: inline-block; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-unlocked { background: rgba(0,229,255,0.12); color: #00E5FF; border: 1px solid rgba(0,229,255,0.06); }
+        .badge-locked { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.06); }
+        
         @media (max-width: 768px) {
             .main { padding: 20px 15px; }
             .title-section h1 { font-size: 2em; }
@@ -222,6 +305,8 @@ PUBLIC_HTML = '''
             .server-status-bar { gap: 8px; }
             .server-status-bar .status-item { font-size: 0.7em; padding: 4px 12px; }
             .social-links .btn { font-size: 0.8em; padding: 8px 14px; }
+            .tabs { gap: 6px; }
+            .tab-btn { padding: 8px 14px; font-size: 0.75em; }
         }
         @media (max-width: 480px) {
             .title-section h1 { font-size: 1.5em; }
@@ -229,6 +314,7 @@ PUBLIC_HTML = '''
             .input-group { flex-direction: column; }
             .input-group input, .input-group select { width: 100%; }
             .btn { width: 100%; justify-content: center; }
+            .tab-btn { flex: 1; justify-content: center; }
         }
     </style>
 </head>
@@ -242,79 +328,137 @@ PUBLIC_HTML = '''
         <div class="server-status-bar">
             <div class="status-item"><i class="fas fa-server"></i> Server: <span style="color:#00E5FF;font-weight:600;" id="pub-server">IND</span></div>
             <div class="status-item"><i class="fas fa-users"></i> Accounts: <span class="count" id="pub-accounts">0</span></div>
+            <div class="status-item"><i class="fas fa-heart"></i> Auto-Like: <span id="auto-status-badge" class="badge badge-locked">Locked</span></div>
         </div>
         
-        <div class="glass">
-            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-rocket" style="color:#00E5FF;"></i> Send Likes
-            </h2>
-            <div class="input-group">
-                <input type="number" id="target-uid" placeholder="Enter Target UID" />
-                <select id="server-select" onchange="updateServerStatus(this.value)">
-                    <option value="IND">India</option>
-                    <option value="BD">Bangladesh</option>
-                    <option value="MENA">MENA</option>
-                    <option value="BR">Brazil</option>
-                    <option value="US">US</option>
-                    <option value="SAC">SAC</option>
-                    <option value="NA">NA</option>
-                    <option value="RU">Russia</option>
-                </select>
-                <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-paper-plane"></i> Send</button>
-            </div>
-            <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
+        <div class="tabs">
+            <button class="tab-btn active-tab" onclick="switchTab('send-tab')"><i class="fas fa-paper-plane"></i> Send</button>
+            <button class="tab-btn" onclick="switchTab('verify-tab')"><i class="fas fa-check-double"></i> Verify</button>
+            <button class="tab-btn" onclick="switchTab('auto-tab')"><i class="fas fa-clock"></i> Auto-Like</button>
+            <button class="tab-btn" onclick="switchTab('history-tab')"><i class="fas fa-history"></i> History</button>
+            <button class="tab-btn" onclick="switchTab('status-tab')"><i class="fas fa-chart-bar"></i> Status</button>
         </div>
         
-        <div class="glass">
-            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
-            </h2>
-            <div class="input-group">
-                <input type="number" id="verify-uid" placeholder="Enter UID" />
-                <select id="verify-server" onchange="updateServerStatus(this.value)">
-                    <option value="IND">India</option>
-                    <option value="BD">Bangladesh</option>
-                    <option value="MENA">MENA</option>
-                    <option value="BR">Brazil</option>
-                    <option value="US">US</option>
-                    <option value="SAC">SAC</option>
-                    <option value="NA">NA</option>
-                    <option value="RU">Russia</option>
-                </select>
-                <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
-            </div>
-            <div id="verify-result" style="margin-top:12px;"></div>
-        </div>
-        
-        <div class="glass" style="border-color: {% if session.get('auto_like_unlocked') %}rgba(0,229,255,0.3){% else %}rgba(255,200,0,0.2){% endif %};">
-            <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
-                <i class="fas fa-clock" style="color:{% if session.get('auto_like_unlocked') %}#00E5FF{% else %}#FFC107{% endif %};"></i> 
-                Auto Like
-                {% if session.get('auto_like_unlocked') %}
-                <span style="color:#00E676; font-size:0.7em;">Unlocked</span>
-                {% else %}
-                <span style="color:#FFC107; font-size:0.7em;">Locked</span>
-                {% endif %}
-            </h2>
-            
-            {% if session.get('auto_like_unlocked') %}
-            <div class="input-group">
-                <input type="number" id="auto-target-uid" placeholder="Enter Target UID for Auto-Like" />
-                <button class="btn btn-success" onclick="addAutoTarget()"><i class="fas fa-plus"></i> Add Target</button>
-            </div>
-            <div id="auto-targets-list" style="margin-top:12px;"></div>
-            <div class="note"><i class="fas fa-info-circle"></i> Targets added here will receive auto-likes daily at {{ auto_time }} IST.</div>
-            {% else %}
-            <div style="text-align:center; padding:20px 0;">
-                <i class="fas fa-lock" style="font-size:3em; color:#FFC107; opacity:0.5;"></i>
-                <p style="color:#A8B3CF; margin-top:10px;">Auto-Like feature is locked.</p>
-                <div class="input-group" style="justify-content:center; margin-top:15px;">
-                    <input type="text" id="unlock-code" placeholder="Enter Unlock Code" style="max-width:250px;" />
-                    <button class="btn btn-unlock" onclick="unlockAutoLike()"><i class="fas fa-key"></i> Unlock</button>
+        <!-- Send Tab -->
+        <div id="send-tab" class="tab-content active-tab">
+            <div class="glass">
+                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                    <i class="fas fa-rocket" style="color:#00E5FF;"></i> Send Likes
+                </h2>
+                <div class="input-group">
+                    <input type="number" id="target-uid" placeholder="Enter Target UID" />
+                    <select id="server-select" onchange="updateServerStatus(this.value)">
+                        <option value="IND">India</option>
+                        <option value="BD">Bangladesh</option>
+                        <option value="MENA">MENA</option>
+                        <option value="BR">Brazil</option>
+                        <option value="US">US</option>
+                        <option value="SAC">SAC</option>
+                        <option value="NA">NA</option>
+                        <option value="RU">Russia</option>
+                    </select>
+                    <button class="btn btn-rocket" onclick="sendLikes()"><i class="fas fa-paper-plane"></i> Send</button>
                 </div>
-                <div id="unlock-message" style="margin-top:10px;"></div>
+                <div class="note"><i class="fas fa-info-circle"></i> Sends ALL likes from all available accounts to the target UID.</div>
             </div>
-            {% endif %}
+        </div>
+        
+        <!-- Verify Tab -->
+        <div id="verify-tab" class="tab-content">
+            <div class="glass">
+                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                    <i class="fas fa-check-double" style="color:#00E5FF;"></i> Verify Profile
+                </h2>
+                <div class="input-group">
+                    <input type="number" id="verify-uid" placeholder="Enter UID" />
+                    <select id="verify-server" onchange="updateServerStatus(this.value)">
+                        <option value="IND">India</option>
+                        <option value="BD">Bangladesh</option>
+                        <option value="MENA">MENA</option>
+                        <option value="BR">Brazil</option>
+                        <option value="US">US</option>
+                        <option value="SAC">SAC</option>
+                        <option value="NA">NA</option>
+                        <option value="RU">Russia</option>
+                    </select>
+                    <button class="btn btn-rocket" onclick="verifyProfile()"><i class="fas fa-check-double"></i> Verify</button>
+                </div>
+                <div id="verify-result"></div>
+            </div>
+        </div>
+        
+        <!-- Auto-Like Tab -->
+        <div id="auto-tab" class="tab-content">
+            <div class="glass" id="auto-glass">
+                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                    <i class="fas fa-clock" style="color:#FFC107;"></i> Auto Like
+                    <span id="auto-status-label" style="color:#FFC107; font-size:0.7em;">Locked</span>
+                </h2>
+                
+                <div id="auto-unlocked-content" style="display:none;">
+                    <div class="input-group">
+                        <input type="number" id="auto-target-uid" placeholder="Enter Target UID for Auto-Like" />
+                        <button class="btn btn-success" onclick="addAutoTarget()"><i class="fas fa-plus"></i> Add Target</button>
+                    </div>
+                    <div id="auto-targets-list" style="margin-top:12px;"></div>
+                    <div class="note"><i class="fas fa-info-circle"></i> Targets added here will receive auto-likes daily at <span id="auto-time-display">04:00</span> IST.</div>
+                </div>
+                
+                <div id="auto-locked-content">
+                    <div style="text-align:center; padding:20px 0;">
+                        <i class="fas fa-lock" style="font-size:3em; color:#FFC107; opacity:0.5;"></i>
+                        <p style="color:#A8B3CF; margin-top:10px;">Auto-Like feature is locked.</p>
+                        <div class="input-group" style="justify-content:center; margin-top:15px;">
+                            <input type="text" id="unlock-code" placeholder="Enter Unlock Code" style="max-width:250px;" />
+                            <button class="btn btn-unlock" onclick="unlockAutoLike()"><i class="fas fa-key"></i> Unlock</button>
+                        </div>
+                        <div id="unlock-message" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- History Tab -->
+        <div id="history-tab" class="tab-content">
+            <div class="glass">
+                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                    <i class="fas fa-history" style="color:#00E5FF;"></i> Like History
+                </h2>
+                <div id="history-list">
+                    <div class="note">Loading history...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status Tab -->
+        <div id="status-tab" class="tab-content">
+            <div class="glass">
+                <h2 style="color:#A8B3CF; font-size:1em; letter-spacing:1px; text-transform:uppercase; font-weight:600; margin-bottom:15px;">
+                    <i class="fas fa-chart-bar" style="color:#00E5FF;"></i> System Status
+                </h2>
+                <div id="status-content">
+                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
+                        <span style="color:#A8B3CF;">Server</span>
+                        <span style="color:#00E5FF;font-weight:600;" id="status-server">IND</span>
+                    </div>
+                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
+                        <span style="color:#A8B3CF;">Accounts Available</span>
+                        <span style="color:#00E676;font-weight:600;" id="status-accounts">0</span>
+                    </div>
+                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
+                        <span style="color:#A8B3CF;">Auto-Like Status</span>
+                        <span style="font-weight:600;" id="status-auto">Locked</span>
+                    </div>
+                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(43,52,66,0.2);">
+                        <span style="color:#A8B3CF;">Auto-Like Time</span>
+                        <span style="color:#FFC107;font-weight:600;" id="status-auto-time">04:00 IST</span>
+                    </div>
+                    <div class="row-display" style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span style="color:#A8B3CF;">Total Likes Sent</span>
+                        <span style="color:#00E676;font-weight:600;" id="status-total-likes">0</span>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="social-links">
@@ -352,14 +496,31 @@ PUBLIC_HTML = '''
 
     <script>
         let currentServer = 'IND';
-        let isLoggedIn = {{ 'true' if session.get('user_email') else 'false' }};
-        let isAutoUnlocked = {{ 'true' if session.get('auto_like_unlocked') else 'false' }};
+        let isAutoUnlocked = false;
+        let autoTime = '04:00';
+        
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active-tab'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active-tab'));
+            document.getElementById(tabId).classList.add('active-tab');
+            document.querySelector(`.tab-btn[onclick*="${tabId}"]`).classList.add('active-tab');
+            if (tabId === 'history-tab') loadHistory();
+            if (tabId === 'status-tab') loadStatus();
+        }
         
         function updateServerStatus(server) {
             currentServer = server;
             document.getElementById('pub-server').textContent = server;
             document.querySelectorAll('#server-select, #verify-server').forEach(el => el.value = server);
+            if (document.getElementById('status-server')) {
+                document.getElementById('status-server').textContent = server;
+            }
             loadPublicData();
+        }
+        
+        function formatTime(iso) {
+            if (!iso) return 'Never';
+            try { const d = new Date(iso); return d.toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return iso; }
         }
         
         function loadPublicData() {
@@ -368,6 +529,9 @@ PUBLIC_HTML = '''
                 .then(data => {
                     if (data.error) return;
                     document.getElementById('pub-accounts').textContent = data.total_accounts || 0;
+                    if (document.getElementById('status-accounts')) {
+                        document.getElementById('status-accounts').textContent = data.total_accounts || 0;
+                    }
                 });
         }
         
@@ -388,6 +552,38 @@ PUBLIC_HTML = '''
                 });
         }
         
+        function loadHistory() {
+            fetch('/api/public-history')
+                .then(res => res.json())
+                .then(data => {
+                    let html = '';
+                    if (data.history && data.history.length > 0) {
+                        data.history.slice().reverse().forEach(h => {
+                            html += `<div class="history-item">
+                                <span><span class="uid">${h.uid}</span> <span class="name">${h.username || 'Unknown'}</span></span>
+                                <span class="likes">+${h.likes_sent}</span>
+                                <span class="time">${formatTime(h.timestamp)}</span>
+                            </div>`;
+                        });
+                    } else {
+                        html = '<div class="note">No history yet</div>';
+                    }
+                    document.getElementById('history-list').innerHTML = html;
+                });
+        }
+        
+        function loadStatus() {
+            fetch('/api/public-status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('status-accounts').textContent = data.total_accounts || 0;
+                    document.getElementById('status-auto').textContent = data.auto_unlocked ? 'Unlocked' : 'Locked';
+                    document.getElementById('status-auto').style.color = data.auto_unlocked ? '#00E676' : '#FFC107';
+                    document.getElementById('status-auto-time').textContent = data.auto_time || '04:00 IST';
+                    document.getElementById('status-total-likes').textContent = data.total_likes_sent || 0;
+                });
+        }
+        
         function showResult(data) {
             document.getElementById('res-name').textContent = data.username || 'Unknown';
             document.getElementById('res-sent').textContent = data.likes_sent || 0;
@@ -405,9 +601,9 @@ PUBLIC_HTML = '''
             const uid = document.getElementById('target-uid').value.trim();
             const server = document.getElementById('server-select').value;
             if (!uid) { alert('Enter a target UID'); return; }
-            if (!confirm(`Send likes to ${uid} on ${server}?`)) return;
+            if (!confirm('Send likes to ' + uid + ' on ' + server + '?')) return;
             
-            const btn = document.querySelector('.btn-rocket');
+            const btn = document.querySelector('#send-tab .btn-rocket');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
             btn.disabled = true;
@@ -423,6 +619,8 @@ PUBLIC_HTML = '''
                 btn.disabled = false;
                 if (data.success) {
                     showResult(data);
+                    loadHistory();
+                    loadStatus();
                 } else {
                     alert('Error: ' + (data.error || 'Unknown error'));
                 }
@@ -434,6 +632,11 @@ PUBLIC_HTML = '''
             const server = document.getElementById('verify-server').value;
             if (!uid) { alert('Enter a UID'); return; }
             
+            const btn = document.querySelector('#verify-tab .btn-rocket');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            btn.disabled = true;
+            
             fetch('/api/public-verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -441,17 +644,19 @@ PUBLIC_HTML = '''
             })
             .then(res => res.json())
             .then(data => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
                 if (data.error) {
-                    document.getElementById('verify-result').innerHTML = `<div style="color:#FF4D6D;">${data.error}</div>`;
+                    document.getElementById('verify-result').innerHTML = '<div style="color:#FF4D6D;">' + data.error + '</div>';
                     return;
                 }
                 document.getElementById('verify-result').innerHTML = `
-                    <div style="background:rgba(22,27,34,0.5);padding:14px;border-radius:12px;border:1px solid rgba(43,52,66,0.3);">
-                        <div style="color:#00E5FF;font-weight:600;font-size:1em;">UID: ${data.uid}</div>
-                        <div style="color:#F8FAFC;font-size:0.9em;">Name: ${data.username}</div>
-                        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:0.85em;color:#A8B3CF;">
+                    <div class="verify-result-box">
+                        <div class="uid-display">UID: ${data.uid}</div>
+                        <div class="name-display">Name: ${data.username}</div>
+                        <div class="row-display">
                             <span>Total Likes</span>
-                            <span style="color:#00E676;font-weight:600;">${data.likes}</span>
+                            <span class="likes-display">${data.likes}</span>
                         </div>
                     </div>
                 `;
@@ -470,10 +675,10 @@ PUBLIC_HTML = '''
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById('unlock-message').innerHTML = `<div style="color:#00E676;">✅ ${data.message}</div>`;
+                    document.getElementById('unlock-message').innerHTML = '<div style="color:#00E676;">' + data.message + '</div>';
                     setTimeout(() => location.reload(), 1500);
                 } else {
-                    document.getElementById('unlock-message').innerHTML = `<div style="color:#FF4D6D;">❌ ${data.message}</div>`;
+                    document.getElementById('unlock-message').innerHTML = '<div style="color:#FF4D6D;">' + data.message + '</div>';
                 }
             });
         }
@@ -499,7 +704,7 @@ PUBLIC_HTML = '''
         }
         
         function removeAutoTarget(uid) {
-            if (!confirm(`Remove ${uid} from auto-like targets?`)) return;
+            if (!confirm('Remove ' + uid + ' from auto-like targets?')) return;
             fetch('/api/remove-auto-target', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -512,9 +717,44 @@ PUBLIC_HTML = '''
             });
         }
         
+        function checkAutoStatus() {
+            fetch('/api/check-auto-status')
+                .then(res => res.json())
+                .then(data => {
+                    isAutoUnlocked = data.unlocked;
+                    const badge = document.getElementById('auto-status-badge');
+                    const label = document.getElementById('auto-status-label');
+                    const lockedContent = document.getElementById('auto-locked-content');
+                    const unlockedContent = document.getElementById('auto-unlocked-content');
+                    
+                    if (isAutoUnlocked) {
+                        badge.className = 'badge badge-unlocked';
+                        badge.textContent = 'Unlocked';
+                        label.textContent = 'Unlocked';
+                        label.style.color = '#00E676';
+                        lockedContent.style.display = 'none';
+                        unlockedContent.style.display = 'block';
+                        document.getElementById('auto-time-display').textContent = data.auto_time || '04:00';
+                        loadAutoTargets();
+                    } else {
+                        badge.className = 'badge badge-locked';
+                        badge.textContent = 'Locked';
+                        label.textContent = 'Locked';
+                        label.style.color = '#FFC107';
+                        lockedContent.style.display = 'block';
+                        unlockedContent.style.display = 'none';
+                    }
+                    
+                    if (data.auto_time) {
+                        autoTime = data.auto_time;
+                    }
+                });
+        }
+        
         loadPublicData();
+        checkAutoStatus();
         setInterval(loadPublicData, 10000);
-        if (isAutoUnlocked) loadAutoTargets();
+        setInterval(checkAutoStatus, 30000);
     </script>
 </body>
 </html>
@@ -522,13 +762,34 @@ PUBLIC_HTML = '''
 
 @public_bp.route('/')
 def index():
-    return render_template_string(PUBLIC_HTML, auto_time=f"{AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d}")
+    return render_template_string(PUBLIC_HTML)
 
 @public_bp.route('/api/public-data')
 def public_data():
     server = request.args.get('server', 'IND')
     accounts = load_accounts(server)
     return jsonify({'total_accounts': len(accounts)})
+
+@public_bp.route('/api/public-history')
+def public_history():
+    return jsonify({'history': like_history[-50:]})
+
+@public_bp.route('/api/public-status')
+def public_status():
+    total_likes = sum(len(v) for v in liked_cache.values())
+    return jsonify({
+        'total_accounts': len(load_accounts('IND')),
+        'total_likes_sent': total_likes,
+        'auto_unlocked': session.get('auto_like_unlocked', False),
+        'auto_time': f"{AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST"
+    })
+
+@public_bp.route('/api/check-auto-status')
+def check_auto_status():
+    return jsonify({
+        'unlocked': session.get('auto_like_unlocked', False),
+        'auto_time': f"{AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST"
+    })
 
 @public_bp.route('/api/public-send', methods=['POST'])
 def public_send():
@@ -599,7 +860,7 @@ def unlock_auto():
     
     if verify_admin_code(code):
         session['auto_like_unlocked'] = True
-        add_activity_log(f"🔓 User unlocked auto-like with code: {code}", "info")
+        add_activity_log(f"User unlocked auto-like with code: {code}", "info")
         return jsonify({'success': True, 'message': 'Auto-like unlocked successfully!'})
     
     return jsonify({'success': False, 'message': 'Invalid code. Contact admin.'})

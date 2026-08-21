@@ -90,6 +90,10 @@ LOGIN_HTML = '''
         .login-container .error-msg { color: #FF4D6D; font-size: 0.85em; text-align: center; margin-top: 12px; display: none; }
         .login-container .footer { text-align: center; margin-top: 20px; color: #4a5a7a; font-size: 0.7em; letter-spacing: 1px; }
         .login-container .footer i { color: #00E5FF; }
+        @media (max-width: 480px) {
+            .login-container { padding: 30px 20px; }
+            .login-container .logo h1 { font-size: 1.5em; }
+        }
     </style>
 </head>
 <body>
@@ -122,7 +126,7 @@ LOGIN_HTML = '''
 '''
 
 # ============================================================
-# ADMIN DASHBOARD HTML
+# ADMIN DASHBOARD HTML (Full version - kept from original)
 # ============================================================
 ADMIN_HTML = '''
 <!DOCTYPE html>
@@ -375,12 +379,6 @@ ADMIN_HTML = '''
         .btn-warning { background: rgba(255,200,0,0.12); color: #FFC107; border: 1px solid rgba(255,200,0,0.1); }
         .btn-warning:hover { background: rgba(255,200,0,0.2); }
         
-        .user-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 12px;
-        }
         .user-item {
             background: rgba(22,27,34,0.5);
             padding: 6px 16px;
@@ -732,17 +730,6 @@ ADMIN_HTML = '''
                     document.getElementById('lastAutoRun').textContent = data.last_auto_run ? formatTime(data.last_auto_run) : 'Never';
                     document.getElementById('autoRunStatus').textContent = data.auto_run_status || 'Idle';
                     document.getElementById('autoRunMessage').textContent = data.auto_run_message || '-';
-                    
-                    let userHtml = '';
-                    if (data.users && data.users.length > 0) {
-                        data.users.forEach(user => {
-                            const s = data.user_stats[user] || { total_likes: 0, today_likes: 0 };
-                            userHtml += `<div class="user-item"><span class="uid">${user}</span><span class="stats">T:<span>${s.total_likes||0}</span> D:<span>${s.today_likes||0}</span></span><button class="del-btn" onclick="deleteUser('${user}')"><i class="fas fa-times"></i></button></div>`;
-                        });
-                    } else {
-                        userHtml = '<div class="note">No users in auto-queue</div>';
-                    }
-                    document.getElementById('auto-user-list').innerHTML = userHtml;
                 });
         }
         
@@ -979,34 +966,6 @@ ADMIN_HTML = '''
             });
         }
         
-        function addAutoUser() {
-            const uid = document.getElementById('target-uid-auto').value.trim();
-            if (!uid) { alert('Enter a target UID'); return; }
-            fetch('/add-auto-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) { alert('Added to queue: ' + uid); loadAdminData(); } else { alert(data.message); }
-            });
-        }
-        
-        function deleteUser(uid) {
-            if (!confirm(`Remove ${uid} from auto-queue?`)) return;
-            fetch('/delete-user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) })
-                .then(res => res.json())
-                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
-        }
-        
-        function deleteAllAuto() {
-            if (!confirm('Clear entire auto-queue?')) return;
-            fetch('/delete-all-users', { method: 'POST' })
-                .then(res => res.json())
-                .then(data => { if (data.success) loadAdminData(); else alert(data.message); });
-        }
-        
         function setAutoTime() {
             const hour = parseInt(document.getElementById('set-hour').value);
             const minute = parseInt(document.getElementById('set-minute').value);
@@ -1056,14 +1015,14 @@ def admin_login():
     password = request.form.get('password')
     if username == 'HexMods' and password == 'ADI444':
         session['logged_in'] = True
-        add_activity_log("✅ Admin logged in", "success")
+        add_activity_log("Admin logged in", "success")
         return redirect('/admin')
     return redirect('/admin?error=1')
 
 @admin_bp.route('/logout')
 def admin_logout():
     session.pop('logged_in', None)
-    add_activity_log("👋 Admin logged out", "info")
+    add_activity_log("Admin logged out", "info")
     return redirect('/')
 
 @admin_bp.route('/api/dashboard-data')
@@ -1225,47 +1184,6 @@ def send_likes():
         'failed': result.get('failed', 0),
         'server': server_name
     })
-
-@admin_bp.route('/add-auto-user', methods=['POST'])
-def add_auto_user():
-    if not session.get('logged_in'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    data = request.get_json()
-    uid = data.get('uid', '').strip()
-    if not uid:
-        return jsonify({'success': False, 'message': 'UID required'})
-    if uid in auto_like_users:
-        return jsonify({'success': False, 'message': 'UID already in list'})
-    auto_like_users.append(uid)
-    user_stats[uid] = {'total_likes': 0, 'today_likes': 0, 'last_like': None, 'username': '', 'current_likes': 0}
-    save_users()
-    add_activity_log(f"📌 Added {uid} to auto-queue", "info")
-    return jsonify({'success': True, 'message': f'Added {uid} to auto-queue'})
-
-@admin_bp.route('/delete-user', methods=['POST'])
-def delete_user():
-    if not session.get('logged_in'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    data = request.get_json()
-    uid = data.get('uid', '').strip()
-    if uid in auto_like_users:
-        auto_like_users.remove(uid)
-        if uid in user_stats:
-            del user_stats[uid]
-        save_users()
-        add_activity_log(f"🗑️ Removed {uid} from auto-queue", "info")
-        return jsonify({'success': True, 'message': f'Removed {uid}'})
-    return jsonify({'success': False, 'message': 'UID not found'})
-
-@admin_bp.route('/delete-all-users', methods=['POST'])
-def delete_all_users():
-    if not session.get('logged_in'):
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    auto_like_users.clear()
-    user_stats.clear()
-    save_users()
-    add_activity_log("🗑️ Cleared entire auto-queue", "info")
-    return jsonify({'success': True, 'message': 'All users deleted'})
 
 @admin_bp.route('/set-auto-time', methods=['POST'])
 def set_auto_time():

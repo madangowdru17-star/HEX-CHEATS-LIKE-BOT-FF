@@ -17,22 +17,13 @@ import random
 import os
 import urllib.parse
 import jwt
-from datetime import timedelta
 import pickle
 import threading
 import hashlib
 import secrets
 
-# Import blueprints
-from public import public_bp
-from admin import admin_bp
-
 app = Flask(__name__)
 app.secret_key = 'hex-cheats-secret-key-2024'
-
-# Register blueprints
-app.register_blueprint(public_bp)
-app.register_blueprint(admin_bp)
 
 # ============================================================
 # SHARED DATA & FUNCTIONS
@@ -117,14 +108,14 @@ def generate_admin_code():
     code = secrets.token_hex(8).upper()
     admin_codes.append(code)
     save_user_db()
-    add_activity_log(f"🔑 Generated admin code: {code}", "info")
+    add_activity_log(f"Generated admin code: {code}", "info")
     return code
 
 def verify_admin_code(code):
     if code in admin_codes:
         admin_codes.remove(code)
         save_user_db()
-        add_activity_log(f"✅ Admin code used: {code}", "success")
+        add_activity_log(f"Admin code used: {code}", "success")
         return True
     return False
 
@@ -142,7 +133,7 @@ def create_user(email, password):
         'auto_like_unlocked': False
     }
     save_user_db()
-    add_activity_log(f"👤 New user registered: {email}", "info")
+    add_activity_log(f"New user registered: {email}", "info")
     return True
 
 def verify_user(email, password):
@@ -159,7 +150,7 @@ def unlock_user_auto_like(email):
     if email in user_db:
         user_db[email]['auto_like_unlocked'] = True
         save_user_db()
-        add_activity_log(f"🔓 Auto-like unlocked for {email}", "info")
+        add_activity_log(f"Auto-like unlocked for {email}", "info")
         return True
     return False
 
@@ -168,7 +159,7 @@ def add_auto_like_target(email, target_uid):
         if target_uid not in user_db[email]['auto_like_targets']:
             user_db[email]['auto_like_targets'].append(target_uid)
             save_user_db()
-            add_activity_log(f"📌 {email} added target {target_uid} to auto-like", "info")
+            add_activity_log(f"{email} added target {target_uid} to auto-like", "info")
             return True
     return False
 
@@ -176,7 +167,7 @@ def remove_auto_like_target(email, target_uid):
     if email in user_db and target_uid in user_db[email]['auto_like_targets']:
         user_db[email]['auto_like_targets'].remove(target_uid)
         save_user_db()
-        add_activity_log(f"🗑️ {email} removed target {target_uid} from auto-like", "info")
+        add_activity_log(f"{email} removed target {target_uid} from auto-like", "info")
         return True
     return False
 
@@ -298,7 +289,7 @@ def add_to_history(target_uid, likes_sent, before, after, username, server="IND"
     }
     like_history.append(entry)
     save_users()
-    add_activity_log(f"✅ {username} | +{likes_sent} likes | Verified: {after - before}", "success")
+    add_activity_log(f"{username} | +{likes_sent} likes | Verified: {after - before}", "success")
 
 def get_next_reset_time():
     now = datetime.now()
@@ -359,7 +350,7 @@ def load_accounts(server_name):
                     parts = line.split(':', 1)
                     uid = parts[0].strip()
                     password = parts[1].strip()
-                    if uid and password:
+                    if uid and password and uid.isdigit():
                         accounts.append({"uid": uid, "password": password})
         return accounts
     except:
@@ -573,7 +564,7 @@ def run_status_check(server="IND"):
     asyncio.run(check_all_accounts_status(server))
 
 async def auto_like_daily():
-    add_activity_log("🚀 Auto-like scheduler started", "info")
+    add_activity_log("Auto-like scheduler started", "info")
     while True:
         try:
             now = datetime.now()
@@ -582,29 +573,28 @@ async def auto_like_daily():
                 target_time += timedelta(days=1)
             wait_seconds = (target_time - now).total_seconds()
             if wait_seconds > 0:
-                add_activity_log(f"⏰ Next auto-like at: {target_time.strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
+                add_activity_log(f"Next auto-like at: {target_time.strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
                 await asyncio.sleep(wait_seconds)
             
-            add_activity_log(f"🔄 Starting auto-like at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
+            add_activity_log(f"Starting auto-like at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} IST", "info")
             
-            # Process all user targets
             for email, user_data in user_db.items():
                 if user_data.get('auto_like_unlocked', False):
                     targets = user_data.get('auto_like_targets', [])
                     for target_uid in targets:
-                        add_activity_log(f"📱 Processing {email} -> {target_uid}", "info")
+                        add_activity_log(f"Processing {email} -> {target_uid}", "info")
                         result = await send_likes_all_accounts(
                             target_uid,
                             "IND",
                             "https://client.ind.freefiremobile.com/LikeProfile"
                         )
-                        add_activity_log(f"✅ Sent {result['success']} likes to {target_uid} for {email}", "success")
+                        add_activity_log(f"Sent {result['success']} likes to {target_uid} for {email}", "success")
                         await asyncio.sleep(0.5)
             
-            add_activity_log(f"✅ Auto-like cycle complete.", "success")
+            add_activity_log(f"Auto-like cycle complete.", "success")
             
         except Exception as e:
-            add_activity_log(f"❌ Auto-like error: {str(e)}", "error")
+            add_activity_log(f"Auto-like error: {str(e)}", "error")
             await asyncio.sleep(60)
 
 def start_auto_like():
@@ -614,7 +604,7 @@ def set_auto_time(hour, minute):
     global AUTO_LIKE_HOUR, AUTO_LIKE_MINUTE
     AUTO_LIKE_HOUR = hour
     AUTO_LIKE_MINUTE = minute
-    add_activity_log(f"⏰ Auto-like time changed to {hour:02d}:{minute:02d} IST", "info")
+    add_activity_log(f"Auto-like time changed to {hour:02d}:{minute:02d} IST", "info")
     return f"Auto-like time set to {hour:02d}:{minute:02d} IST"
 
 # ============================================================
@@ -633,21 +623,30 @@ auto_thread.start()
 
 threading.Thread(target=run_status_check, args=("IND",)).start()
 
-add_activity_log("🚀 HEX CHEATS System Started", "info")
-add_activity_log(f"📁 Accounts: {len(load_accounts('IND'))} (IND)", "info")
-add_activity_log(f"📌 Auto-queue: {len(auto_like_users)} users", "info")
-add_activity_log(f"👤 Users: {len(user_db)} registered", "info")
-add_activity_log(f"🔑 Active codes: {len(admin_codes)}", "info")
-add_activity_log(f"⏰ Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
+add_activity_log("HEX CHEATS System Started", "info")
+add_activity_log(f"Accounts: {len(load_accounts('IND'))} (IND)", "info")
+add_activity_log(f"Auto-queue: {len(auto_like_users)} users", "info")
+add_activity_log(f"Users: {len(user_db)} registered", "info")
+add_activity_log(f"Active codes: {len(admin_codes)}", "info")
+add_activity_log(f"Auto-like at {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily", "info")
 
-print("✅ HEX CHEATS – Complete System Started")
-print(f"📁 Accounts: {len(load_accounts('IND'))} (IND)")
-print("🔐 Admin Login: HexMods / ADI444")
-print(f"👤 Users: {len(user_db)} registered")
-print(f"🔑 Active codes: {len(admin_codes)}")
-print(f"⏰ Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
-print("🌐 Public URL: / (no login)")
+print("HEX CHEATS – Complete System Started")
+print(f"Accounts: {len(load_accounts('IND'))} (IND)")
+print("Admin Login: HexMods / ADI444")
+print(f"Users: {len(user_db)} registered")
+print(f"Active codes: {len(admin_codes)}")
+print(f"Auto-like: {AUTO_LIKE_HOUR:02d}:{AUTO_LIKE_MINUTE:02d} IST daily")
+print("Public URL: / (no login)")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
+# ============================================================
+# REGISTER BLUEPRINTS (Moved to bottom to avoid circular imports)
+# ============================================================
+from public import public_bp
+from admin import admin_bp
+
+app.register_blueprint(public_bp)
+app.register_blueprint(admin_bp)
